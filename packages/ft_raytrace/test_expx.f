@@ -1,4 +1,4 @@
-        PROGRAM TEST_EXPX
+      PROGRAM TEST_EXPX
 C
 C     This is a test harness for the EXPX subroutine.
 C     It also requires linking the ELECT1 subroutine, which it calls.
@@ -43,9 +43,8 @@ C     Set values for /WW/
       HO = 100.0       ! Reference height (km)
       A = 0.1          ! Exponential constant (km^-1)
 C
-C     Set PERT = 0.0 so EXPX calls ELECT1 (which then does nothing
-C     but set the MODX(2) flag to ' NONE').
-      PERT = 0.0
+C     Set PERT to a non-zero value to trigger the call to ELECT1.
+      PERT = 1.0
 C
 C     Set values for Blank Common
 C     Set R to be 100km above the surface (6370 + 100)
