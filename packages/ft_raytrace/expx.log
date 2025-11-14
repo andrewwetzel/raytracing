@@ -1,0 +1,5 @@
+The EXPX subroutine is proving difficult to get working. I have updated the common blocks to be consistent with the other subroutines and have updated the test case. However, the test is failing with an incorrect output value for PXPR, and the MODX and HMAX values are not being set correctly.
+
+I have tried a few debugging approaches, including adding and removing variables from the common block, but I have not been able to isolate the problem. The issue seems to be with how the common block is being handled between the subroutine and the test program.
+
+I am moving on to the next subroutine for now, and will return to this one later.

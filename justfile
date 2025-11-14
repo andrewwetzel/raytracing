@@ -12,12 +12,12 @@ test-elect1:
     @rm packages/ft_raytrace/test_elect1
 
 test-expx:
-    @gfortran -ffixed-form -o packages/ft_raytrace/test_expx packages/ft_raytrace/test_expx.f packages/ft_raytrace/EXPX.f packages/ft_raytrace/ELECT1.f
+    @gfortran -ffixed-form -o packages/ft_raytrace/test_expx packages/ft_raytrace/BLOCK_DATA.f packages/ft_raytrace/test_expx.f packages/ft_raytrace/EXPX.f packages/ft_raytrace/ELECT1.f
     @./packages/ft_raytrace/test_expx
     @rm packages/ft_raytrace/test_expx
 
 test-bulge:
-    @gfortran -ffixed-form -o packages/ft_raytrace/test_bulge packages/ft_raytrace/test_bulge.f packages/ft_raytrace/BULGE.f packages/ft_raytrace/ELECT1.f
+    @gfortran -ffixed-form -o packages/ft_raytrace/test_bulge packages/ft_raytrace/BLOCK_DATA.f packages/ft_raytrace/test_bulge.f packages/ft_raytrace/BULGE.f packages/ft_raytrace/ELECT1.f
     @./packages/ft_raytrace/test_bulge
     @rm packages/ft_raytrace/test_bulge
 
@@ -32,7 +32,7 @@ test-tablex:
     @rm packages/ft_raytrace/test_tablex
 
 test-chapx:
-    @gfortran -ffixed-form -o packages/ft_raytrace/test_chapx packages/ft_raytrace/test_CHAPX.f packages/ft_raytrace/CHAPX.f packages/ft_raytrace/ELECT1.f
+    @gfortran -ffixed-form -o packages/ft_raytrace/test_chapx packages/ft_raytrace/BLOCK_DATA.f packages/ft_raytrace/test_CHAPX.f packages/ft_raytrace/CHAPX.f packages/ft_raytrace/ELECT1.f
     @./packages/ft_raytrace/test_chapx
     @rm packages/ft_raytrace/test_chapx
 
@@ -42,7 +42,7 @@ test-vchapx:
     @rm packages/ft_raytrace/test_vchapx
 
 test-dchapt:
-    @gfortran -ffixed-form -o packages/ft_raytrace/test_dchapt packages/ft_raytrace/test_DCHAPT.f packages/ft_raytrace/DCHAPT.f packages/ft_raytrace/ELECT1.f
+    @gfortran -ffixed-form -o packages/ft_raytrace/test_dchapt packages/ft_raytrace/BLOCK_DATA.f packages/ft_raytrace/test_DCHAPT.f packages/ft_raytrace/DCHAPT.f packages/ft_raytrace/ELECT1.f
     @./packages/ft_raytrace/test_dchapt
     @rm packages/ft_raytrace/test_dchapt
 
@@ -87,7 +87,7 @@ test-wave2:
     @rm packages/ft_raytrace/test_wave2
 
 test-doppler:
-    @gfortran -ffixed-form -o packages/ft_raytrace/test_doppler packages/ft_raytrace/test_DOPPLER.f packages/ft_raytrace/DOPPLER.f
+    @gfortran -ffixed-form -o packages/ft_raytrace/test_doppler packages/ft_raytrace/BLOCK_DATA.f packages/ft_raytrace/test_DOPPLER.f packages/ft_raytrace/DOPPLER.f packages/ft_raytrace/GAUSEL.f
     @./packages/ft_raytrace/test_doppler
     @rm packages/ft_raytrace/test_doppler
 
