@@ -28,12 +28,21 @@
           # It's good practice to include gfortran.cc to get the 
           # libgfortran shared library, which is often needed for linking.
           pkgs.gfortran.cc 
+          
+          # The just command runner
+          pkgs.just
         ];
 
         # You can also run commands every time the shell loads
         shellHook = ''
           echo "Nix development shell activated."
           echo "gfortran is ready to use."
+
+          # Enable justfile auto-completion
+          # This detects your current shell (bash, zsh, etc.)
+          # and sources the correct completion script.
+          eval "$(just --completions $(basename $SHELL))"
+          echo "Justfile auto-completion enabled."
         '';
       };
     };
