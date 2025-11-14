@@ -1,0 +1,84 @@
+      SUBROUTINE DOPPLER
+      DIMENSION HPC(100),FN2C(100),ALPHA(100),BETA(100),GAMMA(100),
+     1 DELTA(100),SLOPE(100),MAT(4,5)
+      COMMON /CONST/ PI,PIT2,PID2,DEGS,RAD,K,DUM(2)
+      COMMON /XX/ MODX(2),X,PXPR,PXPTH,PXPPH,PXPT,HMAX
+      COMMON R(6) /WW/ ID(10),WQ,W(400)
+      EQUIVALENCE (EARTHR,W(2)),(F,W(6)),(READFN,W(151))
+      REAL MAT,K
+      CHARACTER*7 MODX
+      DATA MODX(2) /'DOPPLER'/
+      ENTRY ELECT1
+      IF (READFN.EQ.0.0) GO TO 10
+      READFN=0.0
+      READ 1000, NOC,(HPC(I),FN2C(I),I=1,NOC)
+1000  FORMAT (I4/(F8.2,E12.4))
+      PRINT 1200, (HPC(I),FN2C(I),I=1,NOC)
+1200  FORMAT(1H1,14X,'HEIGHT',4X,'TIME DERIVATIVE OF'/(1X,F20.10,E20.10))
+      A=0.0
+      IF(FN2C(1).NE.0.0) A=ALOG(FN2C(2)/FN2C(1))/(HPC(2)-HPC(1))
+      FN2C(1)=K*FN2C(1)
+      FN2C(2)=K*FN2C(2)
+      SLOPE(1)=A*FN2C(1)
+      SLOPE(NOC)=0.0
+      NMAX=1
+      DO 6 I=2,NOC
+      IF (FN2C(I).GT.FN2C(NMAX)) NMAX=I
+      IF (I.EQ.NOC) GO TO 4
+      FN2C(I+1)=K*FN2C(I+1)
+      DO 3 J=1,3
+      M=I+J-2
+      MAT(J,1)=1.0
+      MAT(J,2)=HPC(M)
+      MAT(J,3)=HPC(M)**2
+      MAT(J,4)=FN2C(M)
+3     CONTINUE
+      CALL GAUSEL (MAT,4,3,4,NRANK)
+      IF (NRANK.LT.3) GO TO 60
+      SLOPE(I)=MAT(2,4)+2.0*MAT(3,4)*HPC(I)
+4     CONTINUE
+      DO 5 J=1,2
+      M=I+J-2
+      MAT(J,1) =1.0
+      MAT(J,2)=HPC(M)
+      MAT(J,3)=HPC(M)**2
+      MAT(J,4)=HPC(M)**3
+      MAT(J,5)=FN2C(M)
+      L=J+2
+      MAT(L,1)=0.0
+      MAT(L,2)=1.0
+      MAT(L,3)=2.0*HPC(M)
+      MAT(L,4)=3.0*HPC(M)**2
+      MAT(L,5)=SLOPE(M)
+5     CONTINUE
+      CALL GAUSEL (MAT,4,4,5,NRANK)
+      IF (NRANK.LT.4) GO TO 60
+      ALPHA(I)=MAT(1,5)
+      BETA(I)=MAT(2,5)
+      GAMMA(I)=MAT(3,5)
+6     DELTA(I) =MAT(4,5)
+      HMAX=AMAX1(HMAX,HPC(NMAX))
+10    NH=2
+      H=R(1)-EARTHR
+      F2=F*F
+      IF (H.GE.HPC(1)) GO TO 12
+11    NH=2
+      IF(FN2C(1).EQ.0.0) GO TO 50
+      X=FN2C(1)*EXP(A*(H-HPC(1)))/F2
+      GO TO 50
+12    IF (H.GE.HPC(NOC)) GO TO 18
+      NSTEP=1
+      IF (H.LT.HPC(NH-1)) NSTEP=-1
+15    IF (HPC(NH-1).LE.H.AND.H.LT.HPC(NH)) GO TO 16
+      NH=NH+NSTEP
+      GO TO 15
+16    X=(ALPHA(NH)+H*(BETA(NH)+H*(GAMMA(NH)+H*DELTA(NH))))/F2
+      GO TO 50
+18    X=FN2C(NOC)/F2
+50    CONTINUE
+      RETURN
+60    PRINT 6000, I,HPC(J)
+6000  FORMAT(' THE',I4,'TH POINT IN THE DN/DT PROFILE HAS',
+     1 ' THE HEIGHT',F8.2,' KM, WHICH IS THE SAME AS ANOTHER POINT.')
+      CALL EXIT
+      END

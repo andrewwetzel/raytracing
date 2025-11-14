@@ -1,73 +1,37 @@
-        SUBROUTINE BULGE
-
-      COMMON /CONST/ PI,PIT2,PID2,DUM
-      COMMON /XX/ MODX,X,PXPR,PXPTH,PXPPH,PXPT,HMAX
-      COMMON /WW/ ID(10),WQ,W(400)
-
-      COMMON R
-
-      CHARACTER*6 MODX(2)
-      REAL X, PXPR, PXPTH, PXPPH, PXPT, HMAX
-
-      REAL PI,PIT2,PID2,DUM(5)
-
-      REAL R(3)
-
-      EQUIVALENCE (EARTHR,W(2)),(F,W(61)),(PERT,W(151))
-
-      REAL H, EARTHR, F, PERT
-      REAL PHMPTH, PFC2PTH, HMAX_CALC, FC2
-      REAL BULLAT, ANMLAT, POW
-      REAL ALPHA, Z100, SH, Z, EXZ
-      INTEGER I
-
-      MODX(1) = ' BULGE'
-
+      SUBROUTINE BULGE
+      COMMON /CONST/ PI,PIT2,PID2,DUM(5)
+      COMMON /XX/ MODX(2),X,PXPR,PXPTH,PXPPH,PXPT,HMAX
+      COMMON R(6) /WW/ ID(10),WQ,W(400)
+      EQUIVALENCE (EARTHR,W(2)),(F,W(6)),(PERT,W(150))
+      DATA MODX(1) /'BULGE'/
       ENTRY ELECTX
-
-      H = R(1) - EARTHR
-
-      PHMPTH = 0.
-      PXPTH = 0.
-      PFC2PTH = 0.
-      HMAX_CALC = 350.
-      FC2 = 225.
-
-      IF(H.LT.100.) GOTO 2
-
-      BULLAT = 7.5*(PID2 - R(2))
-
-      IF(ABS(BULLAT).GE.PI) GOTO 1
-
-      HMAX_CALC = 430. + 80.*COS(BULLAT)
-      PHMPTH = 600.*SIN(BULLAT)
-
-    1 CONTINUE
-      ANMLAT = 22.5*(PID2 - R(2))/PI
-      POW = 2. - ABS(ANMLAT)
-      FC2 = 50.*ANMLAT**2*EXP(POW) + 40.
-      PFC2PTH = -1125./PI*POW*ANMLAT*EXP(POW)
-
-    2 CONTINUE
-      ALPHA = 2.*ALOG(FC2/4.)
-      Z100 = -ALOG(ALPHA)
-
+      H=R(1)-EARTHR
+      PHMPTH=0.0
+      PFC2PTH=0.0
+      HMAX=350.0
+      FC2=225.0
+      IF(H.LT.100.0) GO TO 2
+      BULGELAT=7.5*(PID2-R(2))
+      IF(ABS(BULGELAT).GE.PI) GO TO 1
+      HMAX=430.0+80.0*COS(BULGELAT)
+      PHMPTH=600.0*SIN(BULGELAT)
+1     CONTINUE
+      ANMLAT=22.5*(PID2-R(2))/PI
+      POW=2.0-ABS(ANMLAT)
+      FC2=50.0*ANMLAT**2*EXP(POW)+40.0
+      PFC2PTH=-1125.0/PI*POW*ANMLAT*EXP(POW)
+2     CONTINUE
+      ALPHA=2.0*ALOG(FC2/4.0)-1.0
+      Z100=-ALOG(ALPHA)
       DO 3 I=1,5
-         Z100 = -ALOG(ALPHA - Z100)
-    3 CONTINUE
-
-      SH = (100. - HMAX_CALC)/Z100
-      Z = (H - HMAX_CALC)/SH
-      EXZ = 1. - EXP(-Z)
-
-      HMAX = HMAX_CALC
-      X = FC2*EXP(0.5*(EXZ - Z))/F**2
-      PXPR = -0.5*X*EXZ/SH
-
-      PXPTH = -PXPR*(1.-1./Z100)*PHMPTH
-     &      + (1. - Z*EXZ/(Z100*(1.-EXP(-Z100)))) * X/FC2*PFC2PTH
-
-      IF (PERT.NE.0.) CALL ELECT1
-
+3     Z100=-ALOG(ALPHA-Z100)
+      SH=(100.0-HMAX)/Z100
+      Z=(H-HMAX)/SH
+      EXZ=1.0-EXP(-Z)
+      X=FC2*EXP(0.5*(EXZ-Z))/F**2
+      PXPR=-0.5*X*EXZ/SH
+      PXPTH=-PXPR*(1.0-1.0/Z100)*PHMPTH+(1.0-Z*EXZ/(Z100*(1.0-EXP(-Z100))))
+     1 *X/FC2*PFC2PTH
+      IF (PERT.NE.0.0) CALL ELECT1
       RETURN
       END
