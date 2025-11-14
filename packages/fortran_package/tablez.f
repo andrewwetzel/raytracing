@@ -1,0 +1,366 @@
+INPUT PARAMETER FORM FOR SUBROUTINE T ABL EZ
+
+IOIWSPHERIC COLLlSIOIl FREQUEIKY PROFILE
+T h e first card t ells how many profile points in 14 farrnaL
+
+Th e c ards follow ing the fi rs t
+
+c ard giv e the he ight and collision frequency of the profile po int s one po int per c ard i n
+Set W 250 = 1. 0 t o
+
+F 8 . 2, E 12. 4 forma t.
+
+T he heights must be in increasing order .
+
+r e ad in a new profile.
+
+After the cards are read, TABL E Z w ill res et W 2 50 = O. o.
+
+T his subroutine makes an exponential extrapolation down using the bott om 2 points in
+
+t he profile.
+
+I 2 3,456 7; S 9 loi ll 1 1 1 3 ~ 1 4 i I5 1 6 ~ 17 : IS : 19 120 112i 3i 45 ; 6i 7i S' 9 iIOi ll :12iI3hI 5iI 6i I7 iISI19120i
+HE IGHT
+
+COLLISION FREQUENC Y
+
+HEIGHT
+
+COLLISION FREQUENC Y
+
+COLLI S I ONs/sec.
+
+h
+km
+
+COLLI S IONs/sec.
+
+v
+
+h
+km
+
+v
+
+1 +-1-1-
+
+I --'-t-t
+-"--T -+--+-+--
+
+,
+
+,
+
+,
+
+I , ,
+
+-'-
+
+I
+
+1
+
+I
+
+1
+
+~ --i ~t·-t--I·-- -
+
+I
+
+I
+
+I
+
+I
+
+I
+
+I-I-j-+--
+
+t--I- +- I -+-,-+-L
+
+I
+
+I
+
+I
+
+I
+
+,
+
+, ,
+
+,
+I
+
+I
+
+-1-1--1-+
+
+152
+
+I
+
+I
+
+I
+
+I
+
+I
+
+I
+
+I
+
+I
+
+I
+
+1
+
+I-+-t--I- --
+
+1
+
+1
+
+SUBROUTINE TABLEI
+:ALCULATES COLLISION FREQUENCY A~O ITS GRADIENT FROM PROFILSS
+HAVING THo SAME FORM AS THOSE USED BY CROFTS RAY TRACING PROGRAM
+C ~AKES AN EXPONENTIAL EXTRAPOLATION ~OWN USING THE BOTTO~ TWO POINTS
+C
+NEEDS SJOR~UTINE GAUSEL
+
+C
+C
+
+DIMENSION
+1
+
+HP:(100),FN2C(100),~LPHA(100),BETA(lCOJ.
+
+GAHI'1A(1001 ,DELTA(100) ,I'1AT(~,5) ,5LOPE(100)
+
+:OHMON tCONSTI P(,PIT2,PI02,OJM(5)
+
+:OHHON IlZI
+
+HOOl.l,PZPR,PZPTH,PZ~P~
+
+COMMON FUo' IWHI IO(10I,HO,ltHItOO)
+EQ.UIVALENCE (::AR.fHR,W(Z)). (F"H&I) t<PEAONU,WC25011
+UAL MA T
+~ATA
+
+(MOOZ.6HTA~LEI)
+
+ENTRY COLF~1
+[F (.NOT.~EADNU)
+REAONU'O.
+~EAO
+
+l
+
+2,
+
+GO
+
+TO 10
+
+NO::,(HPCCII ,FN2C(I) ,I::::l,~O::)
+
+FORMAT([4/(F8.l.E1l.4))
+PRINT 1200, (HPC( II .FN2C(II,
+
+1200
+
+l;I,NDe)
+
+FORHAT(lHlfl~X,bHHEIGHT,~X,20HCOLLISION
+
+FREQUENCY
+
+1(lX,F20.10,E2J.10I)
+A·O.
+[F(FNlCU) .N£.O.I A'ALOG(FNlC(l)/FNlC(ll )/(HPCIZ) -HPC(lll
+>NlC(1)'FN2C(11/PITl'1.E-6
+FNlC(Z)'FNlC('I/PITZ'1.E-6
+
+SLOPE(11;A·FN2C(11
+SLOPE(NOCI'O.
+)0 5 I'Z.NOC
+IF(I.EQ.NOCI GO TO 6
+FNZC(I+l)' FNZCII+11/PITZ'1.E-6
+
+JO 3 J::l,3
+
+M=I+J-Z
+MAT (Jtl)=1.
+HAT(J.Z)'HPC(HI
+~AT(J,3'=H~C(H)··2
+
+3
+
+MAT(J,~)=FNZC(H)
+
+CALL GAUSEL PlAf.It,3,It,NRANK)
+IF
+
+INRANK.LT.3)
+
+GO
+
+TO ZO
+
+SLOPE (Xl =I1AT (2 ,It)"2 .·Jr1AT (3, It) .HPC(I)
+;
+
+:ONTINUE
+
+iJO It ..J::1,2
+Jr1=I"J-Z
+MAT(J.l)=l.
+UT(J.ZI=HPC(HI
+
+I1AT(J,3J;HPC(H)··Z
+MAT(J,It)::HPC(")··3
+HAT(J.51=FNZCIHI
+
+L=J"Z
+HAHL.U',.
+
+HAT(L,Z)::1.
+~ATIL.31'Z.·HPCIMI
+
+I1AT(L,It)::3.·HPC(H)··Z
+4
+
+~ATIL.51=SLOPE(MI
+
+CALL GAUSEL (HAT.It,4,5,NRANK)
+IF (NRANK.LT.41 GO TO ZO
+ALPHA(II'HAT(1.51
+3ETA(I1=HAT(Z.51
+~AHHA(I'=MAT(3,5)
+
+S
+
+DELTA(II=HAT('.51
+JUP=Z
+10 H=Rlll-EARTHR
+IF (H.GE.HPC(UI GO TO 1Z
+1l JUP=Z
+Z=FNZC(ll'EXP(A"H-HPC(lIII/F
+PZPR=A'Z
+
+153
+
+TAB lOO 1
+TABZOOZ
+TABZ003
+TABl004
+TAB lOOS
+TAB Z006
+TABl007
+TABl008
+TABl009
+TABlOl0
+TAB lOll
+TABl01Z
+TAB lOll
+TABl014
+TABl01S
+TABl016
+TABl017
+TAB l018
+TABl019
+TABzoza
+TABlOZl
+TAB lOZZ
+TAB ZOZ3
+TABIOZ4
+TAB lOZS
+TABlOZ6
+TABZOZ7
+TABZOZ8
+TAB lOZ9
+TABl030
+TABl031
+TABl03Z
+TABl033
+TABZ034
+TAB Z035
+TAB l036
+TABZ037
+TABl038
+TAB Z039
+TABZO,O
+TABZ041
+TAB l04Z
+TAB Z043
+TABZO . .
+TABl045
+TABZO,6
+TAB ZO.r
+TAB Z048
+TAB l049
+TAB l 050
+TABZ051
+TABZ05Z
+TAB Z053
+TAB Z054
+TABZ055
+TABZ056
+TABl057
+TABZ058
+TABZ059
+TABZ060
+TAB Z061
+TABl06Z
+TAB la63
+TABl064
+TABl065
+
+TABl 0 66
+TABl 06 7
+NS rEP= I
+TABl068
+IF fH.LT.HPCfJUP-I)) NSTEP=- I
+TABl069
+15 IF fHPCfJUP-]l.GT.H.OR.H.GE.HPCfJUP)) GO TO 16
+TABl070
+Z=IALPHA(JUPI+H*IBETAIJUP)+H*!GAMMA(JUP1+H*DELTA(JUPJ IIIIF
+TABl 07 1
+PlPR=IBET~(JUPI+H*12.*GAMMA{JUPI+H*3.*OELTA(JUP)))/F
+TABl072
+TABl073
+RETURN
+}6 JUo=JUP+NSTEP
+TABl 074
+IF CJUP.LT.21 GO TO 11
+TAAl 0 75
+IF fJUP.LT.NOC) G(l TO 15
+TABl 076
+18 JlJP=NO(
+T ABlO 77
+l=FN2CfNOCl/F
+TABl078
+PZPR=n.
+TABl 079
+RETURN
+TABl OBO
+20 PRINT 7.1. J,HPcctl
+TABl ORl
+21
+FORMAT'4H THE.I4.5BHTH POINT IN THE COLLISION FREQUENCY PROFILE HATABl082
+1S THE HEIGHT.F8.2,40H KM, WHICH IS THE SAME A~ ANOTHE R POINT.'
+TABl083
+TABl OB4
+CALL FXIT
+END
+TABlOB5
