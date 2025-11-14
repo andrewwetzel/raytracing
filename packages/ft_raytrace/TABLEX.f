@@ -1,0 +1,91 @@
+      SUBROUTINE T ABLEX
+      DIMENSION HPC(250),FN2C(250),ALPHA(250),BETA(250),GAMMA(250),
+     1 DELTA(250),SLOPE(250),MAT(4,5)
+      COMMON /CONST/ PI,PIT2,PID2,DEGS,RAD,K,DUM(2)
+      COMMON /XX/ MODX(2),X,PXPR,PXPTH,PXPPH,PXPT,HMAX
+      COMMON R(6) /WW/ ID(10),WQ,W(400)
+      EQUIVALENCE (EARTHR,W(2)),(F,W(6)),(READFN,W(100)),(PERT,W(150))
+      REAL MAT,K
+      CHARACTER*6 MODX
+      DATA MODX(1) /'TABLEX'/
+      ENTRY ELECTX
+      IF (READFN.EQ.0.0) GO TO 10
+      READFN=0.0
+      READ 1000, NOC,(HPC(I),FN2C(I),I=1,NOC)
+1000  FORMAT (I4/(F8.2,E12.4))
+      PRINT 1200, (HPC(I),FN2C(I),I=1,NOC)
+1200  FORMAT(1H1,14X,6HHEIGHT,4X,16HELECTRON DENSITY/(1X,F20.10,E20.10))
+      A=0.0
+      IF(FN2C(1).NE.0.0) A=ALOG(FN2C(2)/FN2C(1))/(HPC(2)-HPC(1))
+      FN2C(1)=K*FN2C(1)
+      FN2C(2)=K*FN2C(2)
+      SLOPE(1)=A*FN2C(1)
+      SLOPE(NOC)=0.0
+      NMAX=1
+      DO 6 I=2,NOC
+      IF (FN2C(I).GT.FN2C(NMAX)) NMAX=I
+      IF (I.EQ.NOC) GO TO 4
+      FN2C(I+1)=K*FN2C(I+1)
+      DO 3 J=1,3
+      M=I+J-2
+      MAT(J,1)=1.0
+      MAT(J,2)=HPC(M)
+      MAT(J,3)=HPC(M)**2
+      MAT(J,4)=FN2C(M)
+3     CONTINUE
+      CALL GAUSEL (MAT,4,3,4,NRANK)
+      IF (NRANK.LT.3) GO TO 60
+      SLOPE(I)=MAT(2,4)+2.0*MAT(3,4)*HPC(I)
+4     CONTINUE
+      DO 5 J=1,2
+      M=I+J-2
+      MAT(J,1) =1.0
+      MAT(J,2)=HPC(M)
+      MAT(J,3)=HPC(M)**2
+      MAT(J,4)=HPC(M)**3
+      MAT(J,5)=FN2C(M)
+      L=J+2
+      MAT(L,1)=0.0
+      MAT(L,2)=1.0
+      MAT(L,3)=2.0*HPC(M)
+      MAT(L,4)=3.0*HPC(M)**2
+      MAT(L,5)=SLOPE(M)
+5     CONTINUE
+      CALL GAUSEL (MAT,4,4,5,NRANK)
+      IF (NRANK.LT.4) GO TO 60
+      ALPHA(I)=MAT(1,5)
+      BETA(I)=MAT(2,5)
+      GAMMA(I)=MAT(3,5)
+      DELTA(I) =MAT(4,5)
+6     CONTINUE
+      HMAX=HPC(NMAX)
+      F2=F*F
+10    H=R(1)-EARTHR
+      X=0.0
+      PXPR=0.0
+      PXPTH=0.0
+      PXPPH=0.0
+      NH=2
+      IF (H.GE.HPC(1)) GO TO 12
+11    NH=2
+      IF(FN2C(1).EQ.0.0) GO TO 50
+      X=FN2C(1)*EXP(A*(H-HPC(1)))/F2
+      PXPR=A*X
+      GO TO 50
+12    IF (H.GE.HPC(NOC)) GO TO 18
+      NSTEP=1
+      IF (H.LT.HPC(NH-1)) NSTEP=-1
+15    IF (HPC(NH-1).LE.H.AND.H.LT.HPC(NH)) GO TO 16
+      NH=NH+NSTEP
+      GO TO 15
+16    X=(ALPHA(NH)+H*(BETA(NH)+H*(GAMMA(NH)+H*DELTA(NH))))/F2
+      PXPR=(BETA(NH)+H*(2.0*GAMMA(NH)+H*3.0*DELTA(NH)))/F2
+      GO TO 50
+18    X=FN2C(NOC)/F2
+50    IF (PERT.NE.0.0) CALL ELECT1
+      RETURN
+60    PRINT 6000, I,HPC(J)
+6000  FORMAT(' THE',I4,'TH POINT IN THE ELECTRON DENSITY PROFILE HAS',
+     1 ' THE HEIGHT',F8.2,' KM, WHICH IS THE SAME AS ANOTHER POINT.')
+      CALL EXIT
+      END
