@@ -92,3 +92,6 @@ test-doppler:
     @rm packages/ft_raytrace/test_doppler
 
 test: test-elect1 test-expx test-bulge test-gausel test-tablex test-chapx test-vchapx test-dchapt test-linear test-qparab test-torus test-dtorus test-trough test-shock test-wave test-wave2 test-doppler
+
+fpm-test:
+    @cd packages/ft_raytrace && fpm test
