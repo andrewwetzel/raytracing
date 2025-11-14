@@ -17,6 +17,5 @@
       IF (H.LE.HMIN) GO TO 50
       PXPR=K*FACT/F**2
       X=PXPR*(H-HMIN)
-50    IF (PERT.NE.0.0) CALL ELECT1
-      RETURN
+50    RETURN
       END

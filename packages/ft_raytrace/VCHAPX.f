@@ -16,6 +16,5 @@
       TAU=(HM/H)**CHI
       X=(FC/F)**2*SQRT(TAU)*EXP(0.5*(1.0-TAU))
       PXPR=.5*X*(TAU-1.0)*CHI/H
-50    IF (PERT.NE.0.0) CALL ELECT1
-      RETURN
+50    RETURN
       END

@@ -39,7 +39,8 @@ C     SET POSITION TO THE CENTER OF THE TROUGH
 C     CHECK RESULTS (EXPECTING A 50% INCREASE)
       IF (.NOT.((ABS(X - 1.5) .LT. 1.0E-5) .AND.
      +    (ABS(PXPR - 0.15) .LT. 1.0E-5) .AND.
-     +    (ABS(PXPTH - 0.3) .LT. 1.0E-5))) GOTO 200
+     +    (ABS(PXPTH - 0.3) .LT. 1.0E-5) .AND.
+     +    (ABS(PXPPH - 0.0) .LT. 1.0E-5))) GOTO 200
       PRINT 100, '--- TEST PASSED ---'
       GOTO 300
  200  PRINT 100, '--- TEST FAILED ---'

@@ -1,13 +1,14 @@
       PROGRAM TEST_DOPPLER
       COMMON /CONST/ PI,PIT2,PID2,DEGS,RAD,K,DUM(2)
-      COMMON /XX/ MODX(2),X(6),HMAX
+      COMMON /XX/ MODX(2),X,PXPR,PXPTH,PXPPH,PXPT,HMAX
       COMMON R(6)
       COMMON /WW/ ID(10),WQ,W(400)
-      CHARACTER*8 MODX
+      CHARACTER*6 MODX
       INTEGER ID
       REAL WQ, W, R
       REAL READFN
       REAL K
+      REAL X, PXPR, PXPTH, PXPPH, PXPT
 
       EQUIVALENCE (EARTHR,W(2)),(F,W(6)),(READFN,W(151))
 
@@ -31,9 +32,9 @@
 
       PRINT *, 'Test for DOPPLER'
       PRINT *, 'MODX = ', MODX(2)
-      PRINT *, 'X    = ', X(2)
+      PRINT *, 'X    = ', X
 
-      IF (ABS(X(2) - 15000.0/25.0) < 1.0) THEN
+      IF (ABS(X - 15000.0/25.0) < 1.0 .AND. MODX(2) .EQ. 'DOPPLR') THEN
         PRINT *, 'Test PASSED'
       ELSE
         PRINT *, 'Test FAILED'
