@@ -1,12 +1,15 @@
       PROGRAM TEST_CHAPX
-      COMMON /CONST/ PI,PIT2,PID2,DUM(5)
-      COMMON /XX/ MODX(2),X(6),HMAX
+      COMMON /CONST/ PI,PIT2,PID2,DEGS,RAD,K,DUM
+      COMMON /XX/ MODX(2),X,PXPR,PXPTH,PXPPH,PXPT,HMAX
       COMMON R(6)
       COMMON /WW/ ID(10),WQ,W(400)
-      CHARACTER*8 MODX
+      CHARACTER*6 MODX
       INTEGER ID
       REAL WQ, W, R
+      REAL X, PXPR, PXPTH, PXPPH, PXPT
       REAL FC, HM, SH, ALPHA, A, B, C, E, PERT
+      REAL PI, PIT2, PID2, DEGS, RAD, K, DUM(7)
+      REAL EARTHR, F
 
       EQUIVALENCE (EARTHR,W(2)),(F,W(6)),(FC,W(101)),(HM,W(102)),
      1 (SH,W(103)),(ALPHA,W(104)),(A,W(105)),(B,W(106)),(C,W(107)),
@@ -35,9 +38,9 @@
 
       PRINT *, 'Test for CHAPX'
       PRINT *, 'MODX = ', MODX(1)
-      PRINT *, 'X    = ', X(1)
+      PRINT *, 'X    = ', X
 
-      IF (X(1) > 0.0) THEN
+      IF (ABS(X - 4.0) < 1.0 .AND. MODX(1) .EQ. 'CHAPX') THEN
         PRINT *, 'Test PASSED'
       ELSE
         PRINT *, 'Test FAILED'

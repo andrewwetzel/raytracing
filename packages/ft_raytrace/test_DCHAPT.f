@@ -1,12 +1,15 @@
       PROGRAM TEST_DCHAPT
-      COMMON /CONST/ PI,PIT2,PID2,DUM(5)
-      COMMON /XX/ MODX(2),X(6),HMAX
+      COMMON /CONST/ PI,PIT2,PID2,DEGS,RAD,K,DUM
+      COMMON /XX/ MODX(2),X,PXPR,PXPTH,PXPPH,PXPT,HMAX
       COMMON R(6)
       COMMON /WW/ ID(10),WQ,W(400)
-      CHARACTER*8 MODX
+      CHARACTER*6 MODX
       INTEGER ID
       REAL WQ, W, R
+      REAL X, PXPR, PXPTH, PXPPH, PXPT
       REAL FC1, HM1, SH1, FC2, HM2, SH2, C, E, PERT
+      REAL PI, PIT2, PID2, DEGS, RAD, K, DUM(7)
+      REAL EARTHR, F
 
       EQUIVALENCE (EARTHR,W(2)),(F,W(6)),(FC1,W(101)),(HM1,W(102)),
      1 (SH1,W(103)),(FC2,W(104)),(HM2,W(105)),(SH2,W(106)),(C,W(107)),
@@ -35,9 +38,9 @@
 
       PRINT *, 'Test for DCHAPT'
       PRINT *, 'MODX = ', MODX(1)
-      PRINT *, 'X    = ', X(1)
+      PRINT *, 'X    = ', X
 
-      IF (X(1) > 0.0) THEN
+      IF (ABS(X - 4.1114) < 1e-4 .AND. MODX(1) .EQ. 'DCHAPT') THEN
         PRINT *, 'Test PASSED'
       ELSE
         PRINT *, 'Test FAILED'
