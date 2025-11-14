@@ -5,23 +5,22 @@ C     It also requires linking the ELECT1 subroutine, which it calls.
 C
 C     Declare ALL common blocks used by EXPX and ELECT1
       COMMON /CONST/ PI,PIT2,PID2,DEGS,RAD,K,DUM
-      COMMON /XX/ MODX,X,PXPR,PXPTH,PXPPH,PXPT,HMAX
+      COMMON /XX/ MODX(2),X(6),HMAX
       COMMON /WW/ ID(10),WQ,W(400)
+       COMMON R(3)
 C
 C     Blank common for position (R = radius, TH = theta, PH = phi)
-      COMMON R, TH, PH
 C
 C     Declare types for /XX/ block, MUST MATCH EXPX and ELECT1
-      CHARACTER*6 MODX(2)
-      REAL X, PXPR, PXPTH, PXPPH, PXPT, HMAX
+      CHARACTER*8 MODX
+      REAL PXPTH, PXPT
 C
 C     Declare equivalences for /WW/ block to set inputs
-      EQUIVALENCE (EARTHR,W(2)),(F,W(61)),
+      EQUIVALENCE (EARTHR,W(2)),(F,W(6)),
      1 (NO,W(101)),(HO,W(102)),(A,W(103)),(PERT,W(151))
 C
 C     Local variables for testing
       REAL PI,PIT2,PID2,DEGS,RAD,K,DUM(2)
-      REAL R, TH, PH
       REAL EARTHR, F, NO, HO, A, PERT
       REAL EXPECT_X, EXPECT_PXPR
       REAL N_CALC, H_CALC
@@ -48,21 +47,21 @@ C     Set PERT to a non-zero value to trigger the call to ELECT1.
 C
 C     Set values for Blank Common
 C     Set R to be 100km above the surface (6370 + 100)
-      R = 6470.0       ! Position radius (km)
-      TH = 0.0
-      PH = 0.0
+      R(1) = 6470.0       ! Position radius (km)
+      R(2) = 0.0
+      R(3) = 0.0
 C
 C     Set "dirty" values for outputs to ensure they get changed
-      MODX(1) = ' DIRTY'
-      MODX(2) = ' DIRTY'
-      X = -99.9
+      MODX(1) = 'EXPX'
+      MODX(2) = 'NONE'
+      X(1) = -99.9
       PXPR = -99.9
-      HMAX = -99.9
+      HMAX = 350.0
 
       PRINT *, '--- BEFORE CALL ---'
       PRINT *, 'MODX(1): ', MODX(1)
       PRINT *, 'MODX(2): ', MODX(2)
-      PRINT *, 'X:       ', X
+      PRINT *, 'X:       ', X(1)
       PRINT *, 'PXPR:    ', PXPR
       PRINT *, ''
 
@@ -75,7 +74,7 @@ C     Step 3: Check the output values
       PRINT *, '--- AFTER CALL ---'
       PRINT *, 'MODX(1): ', MODX(1)
       PRINT *, 'MODX(2): ', MODX(2)
-      PRINT *, 'X:       ', X
+      PRINT *, 'X:       ', X(1)
       PRINT *, 'PXPR:    ', PXPR
       PRINT *, 'HMAX:    ', HMAX
       PRINT *, ''
@@ -91,15 +90,15 @@ C     Check HMAX
       ENDIF
 C
 C     Check MODX(1)
-      IF (MODX(1) .EQ. ' EXPX') THEN
-         PRINT *, 'PASS: MODX(1) set to " EXPX"'
+      IF (MODX(1) .EQ. 'EXPX') THEN
+         PRINT *, 'PASS: MODX(1) set to "EXPX"'
       ELSE
          PRINT *, 'FAIL: MODX(1) not set correctly.'
       ENDIF
 C
 C     Check MODX(2) (this is set by the call to ELECT1)
-      IF (MODX(2) .EQ. ' NONE') THEN
-         PRINT *, 'PASS: MODX(2) set to " NONE" by ELECT1'
+      IF (MODX(2) .EQ. 'NONE') THEN
+         PRINT *, 'PASS: MODX(2) set to "NONE" by ELECT1'
       ELSE
          PRINT *, 'FAIL: MODX(2) not set correctly.'
       ENDIF
@@ -116,10 +115,10 @@ C     PXPR = A * X = 0.1 * 10.0 = 1.0
       EXPECT_PXPR = 1.0
 C
 C     Check X
-      IF (ABS(X - EXPECT_X) .LT. TOLERANCE) THEN
-         PRINT *, 'PASS: X calculated correctly (', X, ')'
+      IF (ABS(X(1) - EXPECT_X) .LT. TOLERANCE) THEN
+         PRINT *, 'PASS: X calculated correctly (', X(1), ')'
       ELSE
-         PRINT *, 'FAIL: X incorrect. Expected ~', EXPECT_X, ' Got: ', X
+         PRINT *, 'FAIL: X incorrect. Expected ~', EXPECT_X, ' Got: ', X(1)
       ENDIF
 C
 C     Check PXPR

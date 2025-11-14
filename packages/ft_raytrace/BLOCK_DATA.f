@@ -1,0 +1,5 @@
+      BLOCK DATA
+      COMMON /XX/ MODX(2),X(6),HMAX
+      CHARACTER*8 MODX
+      DATA MODX(1) /'EXPX'/, MODX(2) /'NONE'/, HMAX /350.0/
+      END

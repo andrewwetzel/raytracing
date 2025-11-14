@@ -1,0 +1,5 @@
+The DOPPLER subroutine is proving difficult to get working. I have updated the common blocks to be consistent with the other subroutines and have written a test case. However, the test is failing with an incorrect output value.
+
+I have tried a few debugging approaches, including simplifying the input data and checking for non-standard functions, but I have not been able to isolate the problem. The issue seems to be with the interpolation of the input data, but I have not been able to confirm this.
+
+I am moving on to the next subroutine for now, and will return to this one later.

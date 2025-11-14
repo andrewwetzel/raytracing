@@ -2,8 +2,7 @@
       COMMON /XX/ MODX(2),X(6)
       COMMON /WW/ ID(10),WQ,W(400)
       EQUIVALENCE (PERT,W(150))
-      CHARACTER*6 MODX
-      DATA MODX(2) /'NONE'/
+      CHARACTER*8 MODX
       ENTRY ELECT1
       PERT=0.0
       RETURN

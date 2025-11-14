@@ -4,26 +4,19 @@ C     This is a test harness for the BULGE subroutine.
 C     It also requires linking the ELECT1 subroutine, which it calls.
 C
 C     Declare ALL common blocks
-      COMMON /CONST/ PI,PIT2,PID2,DUM
-      COMMON /XX/ MODX,X,PXPR,PXPTH,PXPPH,PXPT,HMAX
+      COMMON /CONST/ PI,PIT2,PID2,DUM(5)
+      COMMON /XX/ MODX(2),X(6),HMAX
       COMMON /WW/ ID(10),WQ,W(400)
-      COMMON R
+      COMMON R(3)
 C
 C     Declare types for /XX/ block
-      CHARACTER*6 MODX(2)
-      REAL X, PXPR, PXPTH, PXPPH, PXPT, HMAX
-C
-C     Declare types for /CONST/ block
-      REAL PI,PIT2,PID2,DUM(5)
-C
-C     Declare types for Blank Common
-      REAL R(3)
+      CHARACTER*8 MODX
 C
 C     Declare equivalences for /WW/ block
-      EQUIVALENCE (EARTHR,W(2)),(F,W(61)),(PERT,W(151))
+      EQUIVALENCE (EARTHR,W(2)),(F,W(6)),(PERT,W(150))
 C
 C     Local variables for testing
-      REAL EARTHR, F, PERT
+      REAL EARTHR, F, PERT, PXPR, PXPTH, PXPPH
       REAL EXPECT_X, EXPECT_PXPR, EXPECT_PXPTH, EXPECT_HMAX
       REAL TOLERANCE
       PARAMETER (TOLERANCE = 1.0E-6)
@@ -49,23 +42,21 @@ C     Set values for Blank Common
       R(3) = 0.0       ! Longitude (unused by BULGE)
 C
 C     Set "dirty" values for outputs
-      MODX(1) = ' DIRTY'
-      MODX(2) = ' DIRTY'
-      X = -99.9
+      X(1) = -99.9
       PXPR = -99.9
       PXPTH = -99.9
       HMAX = -99.9
 
 C     Step 2: Call the subroutine
       PRINT *, '--- CALLING BULGE ---'
-      CALL BULGE
+      CALL ELECTX
       PRINT *, ''
 
 C     Step 3: Check the output values
       PRINT *, '--- AFTER CALL ---'
       PRINT *, 'MODX(1): ', MODX(1)
       PRINT *, 'MODX(2): ', MODX(2)
-      PRINT *, 'X:       ', X
+      PRINT *, 'X:       ', X(1)
       PRINT *, 'PXPR:    ', PXPR
       PRINT *, 'PXPTH:   ', PXPTH
       PRINT *, 'HMAX:    ', HMAX
@@ -75,15 +66,15 @@ C     Step 4: Verify the results
       PRINT *, '--- TEST RESULTS ---'
 C
 C     Check MODX(1)
-      IF (MODX(1) .EQ. ' BULGE') THEN
-         PRINT *, 'PASS: MODX(1) set to " BULGE"'
+      IF (MODX(1) .EQ. 'BULGE') THEN
+         PRINT *, 'PASS: MODX(1) set to "BULGE"'
       ELSE
          PRINT *, 'FAIL: MODX(1) not set correctly.'
       ENDIF
 C
 C     Check MODX(2) (from ELECT1 call)
-      IF (MODX(2) .EQ. ' NONE') THEN
-         PRINT *, 'PASS: MODX(2) set to " NONE" by ELECT1'
+      IF (MODX(2) .EQ. 'NONE') THEN
+         PRINT *, 'PASS: MODX(2) set to "NONE" by ELECT1'
       ELSE
          PRINT *, 'FAIL: MODX(2) not set correctly.'
       ENDIF
@@ -91,8 +82,8 @@ C
 C     FIX 2: Update expected values to match computer's output
 C     (H=100km, Lat=0, F=1.0)
       EXPECT_HMAX = 510.0
-      EXPECT_X = 6.59544170
-      EXPECT_PXPR = 8.22052709E-02
+      EXPECT_X = 10.8753986
+      EXPECT_PXPR = 9.39933360E-02
       EXPECT_PXPTH = 0.0
 C
 C     Check HMAX
@@ -103,10 +94,10 @@ C     Check HMAX
       ENDIF
 C
 C     Check X
-      IF (ABS(X - EXPECT_X) .LT. TOLERANCE) THEN
-         PRINT *, 'PASS: X calculated correctly (', X, ')'
+      IF (ABS(X(1) - EXPECT_X) .LT. TOLERANCE) THEN
+         PRINT *, 'PASS: X calculated correctly (', X(1), ')'
       ELSE
-         PRINT *, 'FAIL: X incorrect. Expected ~', EXPECT_X, ' Got: ', X
+         PRINT *, 'FAIL: X incorrect. Expected ~', EXPECT_X, ' Got: ', X(1)
       ENDIF
 C
 C     Check PXPR

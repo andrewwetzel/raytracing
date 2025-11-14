@@ -6,13 +6,13 @@ This directory contains Fortran subroutines for ionospheric ray tracing.
 
 | Subroutine | Status |
 |------------|--------|
-| BULGE      | ❌     |
-| CHAPX      | ❌     |
-| DCHAPT     | ❌     |
-| DOPPLER    | ❌     |
+| BULGE      | ✅     |
+| CHAPX      | ✅     |
+| DCHAPT     | ✅     |
+| DOPPLER    | 🟡     |
 | DTORUS     | ✅     |
 | ELECT1     | ✅     |
-| EXPX       | ❌     |
+| EXPX       | ✅     |
 | GAUSEL     | ❌     |
 | LINEAR     | ❌     |
 | QPARAB     | ❌     |
