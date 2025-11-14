@@ -1,0 +1,52 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{geometry}
+\geometry{a4paper, margin=1in}
+
+\title{Key Equations for Ionospheric Ray Tracing}
+\author{}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+
+This document provides a list of key equations used in the simulation of radio wave propagation through the Earth's ionosphere.
+
+\section{Refractive Index of the Ionosphere}
+
+The refractive index of the ionosphere, $n$, is given by the Appleton-Hartree equation. A simplified version for a cold, collisionless plasma is:
+
+\begin{equation}
+n^2 = 1 - \frac{X}{1 - Y_L \pm \sqrt{Y_T^2 + (Y_L - Y_T)^2}}
+\end{equation}
+
+where:
+\begin{itemize}
+    \item $X = \frac{\omega_p^2}{\omega^2}$
+    \item $Y = \frac{\omega_c}{\omega}$
+    \item $\omega_p$ is the plasma frequency
+    \item $\omega_c$ is the electron gyrofrequency
+    \item $\omega$ is the wave frequency
+    \item $Y_L = Y \cos\theta$
+    \item $Y_T = Y \sin\theta$
+    \item $\theta$ is the angle between the wave propagation direction and the Earth's magnetic field
+\end{itemize}
+
+\section{Snell's Law}
+
+Snell's Law describes the relationship between the angles of incidence and refraction for a wave passing through a boundary between two different isotropic media.
+
+\begin{equation}
+n_1 \sin\theta_1 = n_2 \sin\theta_2
+\end{equation}
+
+where:
+\begin{itemize}
+    \item $n_1$ and $n_2$ are the refractive indices of the two media
+    \item $\theta_1$ and $\theta_2$ are the angles of incidence and refraction, respectively
+\end{itemize}
+
+\end{document}
