@@ -22,7 +22,7 @@ test-bulge:
     @rm packages/ft_raytrace/test_bulge
 
 test-gausel:
-    @gfortran -ffixed-form -o packages/ft_raytrace/test_gausel packages/ft_raytrace/GAUSEL.f
+    @gfortran -ffixed-form -o packages/ft_raytrace/test_gausel packages/ft_raytrace/test_gausel.f packages/ft_raytrace/GAUSEL.f
     @./packages/ft_raytrace/test_gausel
     @rm packages/ft_raytrace/test_gausel
 
