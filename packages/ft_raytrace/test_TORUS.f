@@ -1,0 +1,55 @@
+      PROGRAM TEST_TORUS
+      COMMON /CONST/ PI,PIT2,PID2,DUM(5)
+      COMMON /XX/ MODX(2),X,PXPR,PXPTH,PXPPH,PXPT,HMAX
+      COMMON R(6) /WW/ ID(10),WQ,W(400)
+      EQUIVALENCE (EARTHR,W(2)),(C0,W(151)),(A,W(152)),(B,W(153)),
+     1 (BETA,W(154)),(H0,W(155))
+      REAL LAMBDA
+      CHARACTER*6 MODX
+
+C     INITIALIZE CONSTANTS AND PARAMETERS
+      PI = 3.14159265
+      PID2 = PI / 2.0
+      EARTHR = 6370.0
+      C0 = 0.5
+      A = 100.0
+      B = 50.0
+      BETA = 0.0
+      H0 = 300.0
+
+C     SET INITIAL ELECTRON DENSITY AND GRADIENTS
+      X = 1.0
+      PXPR = 0.1
+      PXPTH = 0.2
+      PXPPH = 0.0
+
+C     SET POSITION TO THE CENTER OF THE TORUS
+      R(1) = EARTHR + H0
+      R(2) = PID2
+      R(3) = 0.0
+
+      PRINT 100, '--- BEFORE CALL ---'
+      PRINT 110, 'X = ', X
+      PRINT 110, 'PXPR = ', PXPR
+      PRINT 110, 'PXPTH = ', PXPTH
+ 100  FORMAT(A20)
+ 110  FORMAT(A10, F10.5)
+
+      CALL ELECT1
+
+      PRINT 100, '--- AFTER CALL ---'
+      PRINT 110, 'X = ', X
+      PRINT 110, 'PXPR = ', PXPR
+      PRINT 110, 'PXPTH = ', PXPTH
+
+C     CHECK RESULTS (EXPECTING A 50% INCREASE)
+      IF (.NOT.((ABS(X - 1.5) .LT. 1.0E-5) .AND.
+     +    (ABS(PXPR - 0.15) .LT. 1.0E-5) .AND.
+     +    (ABS(PXPTH - 0.3) .LT. 1.0E-5) .AND.
+     +    (ABS(PXPPH - 0.0) .LT. 1.0E-5))) GOTO 200
+      PRINT 100, '--- TEST PASSED ---'
+      GOTO 300
+ 200  PRINT 100, '--- TEST FAILED ---'
+ 300  CONTINUE
+
+      END

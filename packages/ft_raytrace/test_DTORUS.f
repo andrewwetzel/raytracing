@@ -1,0 +1,59 @@
+      PROGRAM TEST_DTORUS
+      COMMON /CONST/ PI,PIT2,PID2,DUM(5)
+      COMMON /XX/ MODX(2),X,PXPR,PXPTH,PXPPH,PXPT
+      COMMON R(6) /WW/ ID(10),WQ,W(400)
+      EQUIVALENCE (EARTHR,W(2)),(C1,W(151)),(A1,W(152)),(B1,W(153)),
+     1 (BETA,W(154)),(H1,W(155)),(C2,W(156)),(A2,W(157)),(B2,W(158)),
+     2 (H2,W(159))
+      REAL LAMBDA1,LAMBDA2
+      CHARACTER*6 MODX
+
+C     INITIALIZE CONSTANTS AND PARAMETERS
+      PI = 3.14159265
+      PID2 = PI / 2.0
+      EARTHR = 6370.0
+      C1 = 0.5
+      A1 = 100.0
+      B1 = 50.0
+      BETA = 0.0
+      H1 = 300.0
+      C2 = 0.25
+      A2 = 80.0
+      B2 = 40.0
+      H2 = 200.0
+
+C     SET INITIAL ELECTRON DENSITY AND GRADIENTS
+      X = 1.0
+      PXPR = 0.1
+      PXPTH = 0.2
+      PXPPH = 0.0
+
+C     SET POSITION TO THE CENTER OF THE FIRST TORUS
+      R(1) = EARTHR + H1
+      R(2) = PID2
+      R(3) = 0.0
+
+      PRINT 100, '--- BEFORE CALL ---'
+      PRINT 110, 'X = ', X
+      PRINT 110, 'PXPR = ', PXPR
+      PRINT 110, 'PXPTH = ', PXPTH
+ 100  FORMAT(A20)
+ 110  FORMAT(A10, F10.5)
+
+      CALL ELECT1
+
+      PRINT 100, '--- AFTER CALL ---'
+      PRINT 110, 'X = ', X
+      PRINT 110, 'PXPR = ', PXPR
+      PRINT 110, 'PXPTH = ', PXPTH
+
+C     CHECK RESULTS (EXPECTING A 50% INCREASE PLUS A SMALL PERTURBATION)
+      IF (.NOT.((ABS(X - 1.50048) .LT. 1.0E-5) .AND.
+     +    (ABS(PXPR - 0.14999) .LT. 1.0E-5) .AND.
+     +    (ABS(PXPTH - 0.30010) .LT. 1.0E-5))) GOTO 200
+      PRINT 100, '--- TEST PASSED ---'
+      GOTO 300
+ 200  PRINT 100, '--- TEST FAILED ---'
+ 300  CONTINUE
+
+      END

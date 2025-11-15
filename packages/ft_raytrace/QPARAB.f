@@ -1,0 +1,23 @@
+      SUBROUTINE QPARAB
+      COMMON /XX/ MODX(2),X,PXPR,PXPTH,PXPPH,PXPT,HMAX
+      COMMON R(6) /WW/ ID(10),WQ,W(400)
+      EQUIVALENCE (EARTHR,W(2)),(F,W(6)),(FC,W(101)),(HM,W(102)),
+     1 (YM,W(103)),(QUASI,W(104)),(PERT,W(150))
+      CHARACTER*6 MODX
+      DATA MODX(1) /'QPARAB'/
+      ENTRY ELECTX
+      HMAX=HM
+      PXPR=0.0
+      PXPTH=0.0
+      PXPPH=0.0
+      H=R(1)-EARTHR
+      FCF2=(FC/F)**2
+      CONST=1.0
+      IF (QUASI.EQ.1.0) CONST=(EARTHR+HM-YM)/R(1)
+      Z=(H-HM)/YM*CONST
+      X=MAX(0.0,FCF2*(1.0-Z*Z))
+      IF (X.EQ.0.0) GO TO 50
+      IF (QUASI.EQ.1.0) CONST=(EARTHR+HM)*(EARTHR+HM-YM)/R(1)**2
+      PXPR=-2.0*Z*FCF2/YM*CONST
+50    RETURN
+      END

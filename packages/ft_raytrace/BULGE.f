@@ -1,73 +1,20 @@
-        SUBROUTINE BULGE
-
-      COMMON /CONST/ PI,PIT2,PID2,DUM
-      COMMON /XX/ MODX,X,PXPR,PXPTH,PXPPH,PXPT,HMAX
-      COMMON /WW/ ID(10),WQ,W(400)
-
-      COMMON R
-
-      CHARACTER*6 MODX(2)
-      REAL X, PXPR, PXPTH, PXPPH, PXPT, HMAX
-
-      REAL PI,PIT2,PID2,DUM(5)
-
-      REAL R(3)
-
-      EQUIVALENCE (EARTHR,W(2)),(F,W(61)),(PERT,W(151))
-
-      REAL H, EARTHR, F, PERT
-      REAL PHMPTH, PFC2PTH, HMAX_CALC, FC2
-      REAL BULLAT, ANMLAT, POW
-      REAL ALPHA, Z100, SH, Z, EXZ
-      INTEGER I
-
-      MODX(1) = ' BULGE'
-
-      ENTRY ELECTX
-
-      H = R(1) - EARTHR
-
-      PHMPTH = 0.
-      PXPTH = 0.
-      PFC2PTH = 0.
-      HMAX_CALC = 350.
-      FC2 = 225.
-
-      IF(H.LT.100.) GOTO 2
-
-      BULLAT = 7.5*(PID2 - R(2))
-
-      IF(ABS(BULLAT).GE.PI) GOTO 1
-
-      HMAX_CALC = 430. + 80.*COS(BULLAT)
-      PHMPTH = 600.*SIN(BULLAT)
-
-    1 CONTINUE
-      ANMLAT = 22.5*(PID2 - R(2))/PI
-      POW = 2. - ABS(ANMLAT)
-      FC2 = 50.*ANMLAT**2*EXP(POW) + 40.
-      PFC2PTH = -1125./PI*POW*ANMLAT*EXP(POW)
-
-    2 CONTINUE
-      ALPHA = 2.*ALOG(FC2/4.)
-      Z100 = -ALOG(ALPHA)
-
-      DO 3 I=1,5
-         Z100 = -ALOG(ALPHA - Z100)
-    3 CONTINUE
-
-      SH = (100. - HMAX_CALC)/Z100
-      Z = (H - HMAX_CALC)/SH
-      EXZ = 1. - EXP(-Z)
-
-      HMAX = HMAX_CALC
-      X = FC2*EXP(0.5*(EXZ - Z))/F**2
-      PXPR = -0.5*X*EXZ/SH
-
-      PXPTH = -PXPR*(1.-1./Z100)*PHMPTH
-     &      + (1. - Z*EXZ/(Z100*(1.-EXP(-Z100)))) * X/FC2*PFC2PTH
-
-      IF (PERT.NE.0.) CALL ELECT1
-
+      SUBROUTINE BULGE
+      COMMON /XX/ MODX(2),X,PXPR,PXPTH,PXPPH,PXPT,HMAX
+      COMMON R(6) /WW/ ID(10),WQ,W(400)
+      EQUIVALENCE (H0,W(151)),(HSC,W(152)),(XMAX,W(153)),
+     1 (FRAC,W(154)),(XLAT,W(155)),(XLON,W(156)),(HSC2,W(157)),
+     2 (HSC3,W(158)),(HSC4,W(159))
+      CHARACTER*6 MODX
+      DATA MODX(1)/'BULGE'/
+      ENTRY ELECT1
+      HMAX=H0+5.0*HSC
+      H=R(1)-HMAX
+      IF (HSC.LE.0.0.OR.XMAX.EQ.0.0) RETURN
+      E=EXP(H/HSC)
+      X=XMAX*E*(1.0+FRAC*EXP(-((R(2)-XLAT)/HSC2)**2-
+     + ((R(3)-XLON)/HSC3)**2))
+      PXPR=X/HSC
+      PXPTH = -2.0 * FRAC * X * (R(2)-XLAT)/HSC2**2
+      PXPPH = 0.0
       RETURN
       END

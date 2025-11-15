@@ -1,0 +1,66 @@
+      PROGRAM TEST_WAVE2
+      COMMON /CONST/ PI,PIT2,PID2,DUM(5)
+      COMMON /XX/ MODX(2),X,PXPR,PXPTH,PXPPH,PXPT
+      COMMON R(6) /WW/ ID(10),WQ,W(400)
+      EQUIVALENCE (EARTHR,W(2)),(ZO,W(151)),(SH,W(152)),(DELTA,W(153)),
+     1 (VSUBX,W(154)),(LAMBDAX,W(155)),(LAMBDAZ,W(156)),(TP,W(157)),
+     2 (THOO,W(158)),(THC,W(159)),(PHIC,W(160)),(VGX,W(161))
+      REAL LAMBDAX,LAMBDAZ
+      CHARACTER*6 MODX
+
+C     INITIALIZE CONSTANTS AND PARAMETERS
+      PI = 3.14159265
+      PIT2 = 2.0 * PI
+      PID2 = PI / 2.0
+      EARTHR = 6370.0
+      ZO = 300.0
+      SH = 100.0
+      DELTA = 0.5
+      VSUBX = 0.0
+      LAMBDAX = 100.0
+      LAMBDAZ = -300.0
+      TP = 1.0
+      THOO = PID2
+      THC = 1.0
+      PHIC = 1.0
+      VGX = 0.0
+
+C     SET INITIAL ELECTRON DENSITY AND GRADIENTS
+      X = 1.0
+      PXPR = 0.1
+      PXPTH = 0.2
+      PXPPH = 0.0
+      PXPT = 0.0
+
+C     SET POSITION TO THE PEAK OF THE WAVE
+      R(1) = EARTHR + ZO
+      R(2) = PID2
+      R(3) = 0.0
+
+      PRINT 100, '--- BEFORE CALL ---'
+      PRINT 110, 'X = ', X
+      PRINT 110, 'PXPR = ', PXPR
+      PRINT 110, 'PXPTH = ', PXPTH
+      PRINT 110, 'PXPPH = ', PXPPH
+ 100  FORMAT(A20)
+ 110  FORMAT(A10, F10.5)
+
+      CALL ELECT1
+
+      PRINT 100, '--- AFTER CALL ---'
+      PRINT 110, 'X = ', X
+      PRINT 110, 'PXPR = ', PXPR
+      PRINT 110, 'PXPTH = ', PXPTH
+      PRINT 110, 'PXPPH = ', PXPPH
+
+C     CHECK RESULTS (EXPECTING A 50% INCREASE)
+      IF (.NOT.((ABS(X - 1.5) .LT. 1.0E-5) .AND.
+     +    (ABS(PXPR - 0.15000) .LT. 1.0E-5) .AND.
+     +    (ABS(PXPTH - 0.3) .LT. 1.0E-5) .AND.
+     +    (ABS(PXPPH - 0.0) .LT. 1.0E-5))) GOTO 200
+      PRINT 100, '--- TEST PASSED ---'
+      GOTO 300
+ 200  PRINT 100, '--- TEST FAILED ---'
+ 300  CONTINUE
+
+      END
