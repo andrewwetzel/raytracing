@@ -1,0 +1,21 @@
+      SUBROUTINE LINEAR
+      COMMON /CONST/ PI,PIT2,PID2,DEGS,RAD,K,DUM(2)
+      COMMON /XX/ MODX(2),X,PXPR,PXPTH,PXPPH,PXPT,HMAX
+      COMMON R(6) /WW/ ID(10),WQ,W(400)
+      EQUIVALENCE (EARTHR,W(2)),(F,W(6)),(FACT,W(101)),(HM,W(102)),
+     1 (HMIN,W(103)),(PERT,W(150))
+      REAL K
+      CHARACTER*6 MODX
+      DATA MODX(1) /'LINEAR'/
+      ENTRY ELECTX
+      H=R(1)-EARTHR
+      HMAX=HM
+      X=0.0
+      PXPR=0.0
+      PXPTH=0.0
+      PXPPH=0.0
+      IF (H.LE.HMIN) GO TO 50
+      PXPR=K*FACT/F**2
+      X=PXPR*(H-HMIN)
+50    RETURN
+      END
