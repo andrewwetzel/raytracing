@@ -1,0 +1,37 @@
+body {
+  font-family: sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 50px;
+}
+
+.triangle {
+  position: relative;
+  width: 200px;
+  height: 200px;
+  margin: 50px 0;
+}
+
+.side-a {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+}
+
+.side-b {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+}
+
+.side-c {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+input {
+  width: 100px;
+}
