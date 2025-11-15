@@ -1,0 +1,95 @@
+# Fortran Package Manager manifest
+name = "ft_raytrace"
+version = "0.1.0"
+license = "MIT"
+author = "Agent"
+maintainer = "agent@example.com"
+copyright = "Copyright 2024, Agent"
+
+[build]
+auto-executables = false
+auto-tests = false
+auto-examples = false
+
+[fortran]
+implicit-typing = true
+implicit-external = true
+source-form = "fixed"
+
+[library]
+source-dir = "src"
+
+[[test]]
+name = "doppler"
+source-dir = "test"
+main = "test_DOPPLER.f"
+
+[[test]]
+name = "bulge"
+source-dir = "test"
+main = "test_BULGE.f"
+
+[[test]]
+name = "chapx"
+source-dir = "test"
+main = "test_CHAPX.f"
+
+[[test]]
+name = "dchapt"
+source-dir = "test"
+main = "test_DCHAPT.f"
+
+[[test]]
+name = "dtorus"
+source-dir = "test"
+main = "test_DTORUS.f"
+
+[[test]]
+name = "linear"
+source-dir = "test"
+main = "test_LINEAR.f"
+
+[[test]]
+name = "qparab"
+source-dir = "test"
+main = "test_QPARAB.f"
+
+[[test]]
+name = "shock"
+source-dir = "test"
+main = "test_SHOCK.f"
+
+[[test]]
+name = "tablex"
+source-dir = "test"
+main = "test_TABLEX.f"
+
+[[test]]
+name = "torus"
+source-dir = "test"
+main = "test_TORUS.f"
+
+[[test]]
+name = "trough"
+source-dir = "test"
+main = "test_TROUGH.f"
+
+[[test]]
+name = "vchapx"
+source-dir = "test"
+main = "test_VCHAPX.f"
+
+[[test]]
+name = "elect1"
+source-dir = "test"
+main = "test_elect1.f"
+
+[[test]]
+name = "expx"
+source-dir = "test"
+main = "test_expx.f"
+
+[[test]]
+name = "gausel"
+source-dir = "test"
+main = "test_gausel.f"
