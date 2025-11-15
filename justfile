@@ -95,3 +95,9 @@ test: test-elect1 test-expx test-bulge test-gausel test-tablex test-chapx test-v
 
 fpm-test:
     @cd packages/ft_raytrace && fpm test
+
+run-backend:
+    @echo "--- Installing backend dependencies ---"
+    @python3 -m pip install -r packages/backend/requirements.txt
+    @echo "--- Running backend server ---"
+    @cd packages/backend && uvicorn main:app --reload
