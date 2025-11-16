@@ -4,7 +4,7 @@
 
 # Automatically read the project ID from your firebase setup (.firebaserc)
 # This assumes your GCP Project ID and Firebase Project ID are the same.
-FIREBASE_PROJECT_ID := $(shell grep default .firebaserc | cut -d '"' -f 4)
+FIREBASE_PROJECT_ID := `grep default .firebaserc | cut -d '"' -f 4`
 GCP_PROJECT_ID := FIREBASE_PROJECT_ID
 
 # --- User-Defined Deployment Settings ---
@@ -56,6 +56,8 @@ deploy-backend:
       --allow-unauthenticated \
       --project={{GCP_PROJECT_ID}}
 
+#!/usr/bin/env just --justfile
+
 # Deploy the frontend to Firebase Hosting
 # This recipe automatically injects the deployed backend URL into the frontend code
 deploy-frontend: set-firebase-project
@@ -63,11 +65,9 @@ deploy-frontend: set-firebase-project
     
     @echo "Fetching Cloud Run service URL..."
     # Get the URL of the deployed backend
-    SERVICE_URL = $(gcloud run services describe {{BACKEND_SERVICE_NAME}} --platform managed --region {{GCP_REGION}} --project={{GCP_PROJECT_ID}} --format 'value(status.url)')
-    
-    @echo "Injecting backend URL '{{SERVICE_URL}}' into frontend"
-    # Use sed to replace the local URL with the production URL. Creates a .bak file.
-    @sed -i.bak "s|http://127.0.0.1:8000|{{SERVICE_URL}}|g" apps/frontend/script.js
+    SERVICE_URL=`gcloud run services describe {{BACKEND_SERVICE_NAME}} --platform managed --region {{GCP_REGION}} --project={{GCP_PROJECT_ID}} --format 'value(status.url)'`; \
+    echo "Injecting backend URL '$$SERVICE_URL' into frontend"; \
+    sed -i.bak "s|http://1227.0.0.1:8000|$$SERVICE_URL|g" apps/frontend/script.js; \
     
     @echo "Deploying to Firebase..."
     @firebase deploy --only hosting
@@ -188,3 +188,14 @@ test: test-elect1 test-expx test-bulge test-gausel test-tablex test-chapx test-v
 # Run tests using the Fortran Package Manager
 fpm-test:
     @cd packages/ft_raytrace && fpm test
+
+# --- End-to-End Testing ---
+test-e2e:
+    @echo "--- Building and running services ---"
+    @sudo docker compose up -d --build
+    @echo "--- Running end-to-end tests ---"
+    @sleep 5
+    @chmod +x tests/e2e.sh
+    @./tests/e2e.sh
+    @echo "--- Tearing down services ---"
+    @sudo docker compose down
