@@ -17,6 +17,8 @@ BACKEND_SERVICE_NAME := "raytracing-backend"
 
 # Installs dependencies and runs the backend server locally
 run-backend:
+    @echo "--- Checking for pip ---"
+    @python3 -m pip --version || sudo apt-get install -y python3-pip
     @echo "--- Installing backend dependencies ---"
     @python3 -m pip install -r packages/backend/requirements.txt
     @echo "--- Running backend server at http://127.0.0.1:8000 ---"
