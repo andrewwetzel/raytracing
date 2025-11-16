@@ -17,8 +17,6 @@ BACKEND_SERVICE_NAME := "raytracing-backend"
 
 # Installs dependencies and runs the backend server locally
 run-backend:
-    @echo "--- Ensuring uv is installed ---"
-    @pipx install uv
     @echo "--- Syncing dependencies ---"
     @uv pip sync pyproject.toml
     @echo "--- Running backend server at http://127.0.0.1:8000 ---"
