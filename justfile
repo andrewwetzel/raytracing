@@ -25,20 +25,20 @@ run-backend:
 # Starts the local backend and frontend servers using Docker Compose
 test-local:
     @echo "\n--- Starting Local Test Environment (in background) ---"
-    @sudo docker compose -f docker-compose.local.yml up -d
+    @docker compose -f docker-compose.local.yml up -d
     @echo "\n--- Services Started ---"
     @echo "Fetching frontend URL..."
     @{ \
-        PORT=$(sudo docker compose -f docker-compose.local.yml ps | grep frontend | awk '{print $NF}' | cut -d ':' -f 2 | cut -d '-' -f 1); \
+        PORT=$(docker compose -f docker-compose.local.yml ps | grep frontend | awk '{print $NF}' | cut -d ':' -f 2 | cut -d '-' -f 1); \
         echo "Frontend is running at: http://localhost:$$PORT"; \
     }
     @echo "\n--- Attaching to logs (press Ctrl+C to detach) ---"
-    @sudo docker compose -f docker-compose.local.yml logs -f
+    @docker compose -f docker-compose.local.yml logs -f
 
 # Stops the local backend and frontend servers
 stop-local:
     @echo "\n--- Stopping Local Test Environment ---"
-    @sudo docker compose -f docker-compose.local.yml down
+    @docker compose -f docker-compose.local.yml down
 
 # ===================================================================
 # GCP & Firebase Deployment
