@@ -22,11 +22,23 @@ run-backend:
     @echo "--- Running backend server at http://127.0.0.1:8000 ---"
     @uv run uvicorn packages.backend.main:app --reload
 
-# Starts the local backend and provides instructions to test the frontend
-test-local: run-backend
-    @echo "\n--- Local Test Environment ---"
-    @echo "Backend is running at http://127.0.0.1:8000"
-    @echo "Open 'apps/frontend/index.html' in your browser to test."
+# Starts the local backend and frontend servers using Docker Compose
+test-local:
+    @echo "\n--- Starting Local Test Environment (in background) ---"
+    @docker compose -f docker-compose.local.yml up -d
+    @echo "\n--- Services Started ---"
+    @echo "Fetching frontend URL..."
+    @{ \
+        PORT=$(docker compose -f docker-compose.local.yml ps | grep frontend | awk '{print $NF}' | cut -d ':' -f 2 | cut -d '-' -f 1); \
+        echo "Frontend is running at: http://localhost:$$PORT"; \
+    }
+    @echo "\n--- Attaching to logs (press Ctrl+C to detach) ---"
+    @docker compose -f docker-compose.local.yml logs -f
+
+# Stops the local backend and frontend servers
+stop-local:
+    @echo "\n--- Stopping Local Test Environment ---"
+    @docker compose -f docker-compose.local.yml down
 
 # ===================================================================
 # GCP & Firebase Deployment
