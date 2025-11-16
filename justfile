@@ -20,27 +20,12 @@ run-backend:
     @echo "--- Syncing dependencies ---"
     @uv pip sync pyproject.toml
     @echo "--- Running backend server at http://127.0.0.1:8000 ---"
-    @uv run uvicorn packages.backend.main:app --reload &
+    @uv run uvicorn packages.backend.main:app --reload
 
-# Installs dependencies and runs the frontend server locally
-run-frontend:
-    @echo "--- Running frontend server at http://127.0.0.1:8081 ---"
-    @cd apps/frontend && uv run python -m http.server 8081
-
-# Starts the local backend and frontend servers for testing
+# Starts the local backend and frontend servers using Docker Compose
 test-local:
     @echo "\n--- Starting Local Test Environment ---"
-    @just run-backend &
-    @just run-frontend &
-    @sleep 1 # Give servers time to start before printing URLs
-    @echo "\n--- Local Test Environment Running ---"
-    @echo "Backend running at http://127.0.0.1:8000"
-    @echo "Frontend running at http://127.0.0.1:8081"
-    @echo "\nNOTE: Servers are running in the background."
-    @echo "To stop them, you can use the following commands:"
-    @echo "  pkill -f 'uvicorn packages.backend.main:app'"
-    @echo "  pkill -f 'python -m http.server 8081'"
-    @echo "Alternatively, use 'jobs' to list background jobs and 'kill %<job_id>' to stop them."
+    @sudo docker compose -f docker-compose.local.yml up
 
 # ===================================================================
 # GCP & Firebase Deployment
