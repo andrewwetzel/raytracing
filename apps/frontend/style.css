@@ -6,11 +6,21 @@ body {
   margin-top: 50px;
 }
 
-.triangle {
+.triangle-container {
   position: relative;
   width: 200px;
   height: 200px;
   margin: 50px 0;
+}
+
+.triangle {
+  width: 0;
+  height: 0;
+  border-bottom: 200px solid black;
+  border-left: 200px solid transparent;
+  position: absolute;
+  bottom: 0;
+  left: 0;
 }
 
 .side-a {
