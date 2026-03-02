@@ -69,6 +69,34 @@ trace-sample:
 trace-iri:
     {{PY}} -m pyraytrace run packages/pyraytrace/configs/iri_igrf_sample.yaml
 
+# Find elevation angle for a target ground range (default 500 km)
+home range="500":
+    {{PY}} -c "from pyraytrace.propagation import find_elevation; \
+    r = find_elevation(target_range_km={{range}}); \
+    print(f'Target: {{range}} km'); \
+    print(f'Result: elev={r.elevation_deg}° range={r.ground_range_km} km max_h={r.max_height_km} km'); \
+    print(f'Converged: {r.converged} (error {r.error_km} km, {r.n_iterations} iters)')"
+
+# Find MUF/LUF for a given elevation (default 20°)
+muf elev="20":
+    {{PY}} -c "from pyraytrace.propagation import analyze_frequencies; \
+    r = analyze_frequencies(elevation_deg={{elev}}); \
+    print(f'Elevation: {{elev}}°'); \
+    print(f'MUF: {r.muf_mhz} MHz'); \
+    print(f'LUF: {r.luf_mhz} MHz'); \
+    print(f'Optimal: {r.optimal_mhz} MHz (85%% MUF)'); \
+    print(f'Tested {len(r.results)} frequencies')"
+
+# Compute coverage map (all azimuths, 5-60° elevation)
+coverage:
+    {{PY}} -c "from pyraytrace.propagation import compute_coverage; \
+    r = compute_coverage(elev_step=5.0, az_step=30.0); \
+    print(f'{r.n_rays} rays in {r.elapsed_ms:.0f} ms'); \
+    returned = sum(1 for p in r.points if p.returned); \
+    print(f'{returned}/{r.n_rays} returned to ground'); \
+    ranges = [p.ground_range_km for p in r.points if p.ground_range_km]; \
+    print(f'Range: {min(ranges):.0f} — {max(ranges):.0f} km') if ranges else None"
+
 # Benchmark: Rust vs Python on sample case
 bench:
     @echo "--- Benchmarking Rust engine ---"

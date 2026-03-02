@@ -112,6 +112,115 @@ def trace_fan(req: FanTraceRequest):
     }
 
 
+# ============================================================
+# Propagation analysis endpoints
+# ============================================================
+
+class HomingRequest(BaseModel):
+    """Find elevation angle for a target ground range."""
+    target_range_km: float = Field(500.0, ge=50, le=5000, description="Target ground range (km)")
+    freq_mhz: float = Field(10.0, ge=1, le=30)
+    ray_mode: float = Field(-1.0)
+    fc: float = Field(10.0)
+    hm: float = Field(250.0)
+    sh: float = Field(100.0)
+    fh: float = Field(0.8)
+    tolerance_km: float = Field(5.0, ge=1, le=50)
+
+
+class MufRequest(BaseModel):
+    """Find MUF/LUF for a given path."""
+    elevation_deg: float = Field(20.0, ge=1, le=89)
+    ray_mode: float = Field(-1.0)
+    fc: float = Field(10.0)
+    hm: float = Field(250.0)
+    sh: float = Field(100.0)
+    fh: float = Field(0.8)
+    freq_min: float = Field(2.0, ge=1, le=30)
+    freq_max: float = Field(30.0, ge=2, le=50)
+    freq_step: float = Field(0.5, ge=0.1, le=5)
+
+
+class CoverageRequest(BaseModel):
+    """Compute ground coverage map."""
+    freq_mhz: float = Field(10.0, ge=1, le=30)
+    ray_mode: float = Field(-1.0)
+    fc: float = Field(10.0)
+    hm: float = Field(250.0)
+    sh: float = Field(100.0)
+    fh: float = Field(0.8)
+    elev_min: float = Field(5.0, ge=1, le=40)
+    elev_max: float = Field(60.0, ge=10, le=89)
+    elev_step: float = Field(2.0, ge=0.5, le=10)
+    az_min: float = Field(0.0, ge=0, le=360)
+    az_max: float = Field(360.0, ge=0, le=360)
+    az_step: float = Field(15.0, ge=1, le=90)
+
+
+@app.post("/api/propagation/home")
+def api_homing(req: HomingRequest):
+    """Find elevation angle for a target ground range via bisection."""
+    from pyraytrace.propagation import find_elevation
+    result = find_elevation(
+        target_range_km=req.target_range_km,
+        freq_mhz=req.freq_mhz, ray_mode=req.ray_mode,
+        fc=req.fc, hm=req.hm, sh=req.sh, fh=req.fh,
+        tolerance_km=req.tolerance_km,
+    )
+    return {
+        "elevation_deg": result.elevation_deg,
+        "ground_range_km": result.ground_range_km,
+        "max_height_km": result.max_height_km,
+        "converged": result.converged,
+        "error_km": result.error_km,
+        "n_iterations": result.n_iterations,
+    }
+
+
+@app.post("/api/propagation/muf")
+def api_muf(req: MufRequest):
+    """Find MUF/LUF by sweeping frequencies."""
+    from pyraytrace.propagation import analyze_frequencies
+    result = analyze_frequencies(
+        elevation_deg=req.elevation_deg, ray_mode=req.ray_mode,
+        fc=req.fc, hm=req.hm, sh=req.sh, fh=req.fh,
+        freq_min=req.freq_min, freq_max=req.freq_max,
+        freq_step=req.freq_step,
+    )
+    return {
+        "muf_mhz": result.muf_mhz,
+        "luf_mhz": result.luf_mhz,
+        "optimal_mhz": result.optimal_mhz,
+        "results": result.results,
+    }
+
+
+@app.post("/api/propagation/coverage")
+def api_coverage(req: CoverageRequest):
+    """Compute ground coverage map."""
+    from pyraytrace.propagation import compute_coverage
+    result = compute_coverage(
+        freq_mhz=req.freq_mhz, ray_mode=req.ray_mode,
+        fc=req.fc, hm=req.hm, sh=req.sh, fh=req.fh,
+        elev_min=req.elev_min, elev_max=req.elev_max,
+        elev_step=req.elev_step,
+        az_min=req.az_min, az_max=req.az_max,
+        az_step=req.az_step,
+    )
+    return {
+        "points": [
+            {
+                "elev": p.elevation_deg, "az": p.azimuth_deg,
+                "range": p.ground_range_km, "max_h": p.max_height_km,
+                "returned": p.returned,
+            }
+            for p in result.points
+        ],
+        "n_rays": result.n_rays,
+        "elapsed_ms": result.elapsed_ms,
+    }
+
+
 # Serve frontend
 frontend_dir = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "apps", "frontend")
