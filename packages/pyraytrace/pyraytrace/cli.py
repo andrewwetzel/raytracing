@@ -22,6 +22,15 @@ from pyraytrace.models.magnetic_field import Dipoly, Consty
 from pyraytrace.models.collision import Expz2, Constz, Expz
 from pyraytrace.models.refractive_index import Ahwfwc
 
+# Lazy imports for optional models (IRI/IGRF need extra dependencies)
+def _get_iri():
+    from pyraytrace.models.iri import IriElectronDensity
+    return IriElectronDensity
+
+def _get_igrf():
+    from pyraytrace.models.igrf import IgrfMagneticField
+    return IgrfMagneticField
+
 
 # Model registries
 ELECTRON_MODELS = {
@@ -90,13 +99,45 @@ def build_rindex_model(yaml_path: str) -> Ahwfwc:
         data = yaml.safe_load(f)
 
     models = data.get("models", {})
+    tx = data.get("transmitter", {})
+    env = data.get("environment", {})
 
     e_name = models.get("electron_density", "chapx")
     m_name = models.get("magnetic_field", "dipoly")
     c_name = models.get("collision", "expz2")
 
-    e_model = ELECTRON_MODELS[e_name]()
-    m_model = MAGNETIC_MODELS[m_name]()
+    # Build electron density model
+    if e_name == "iri":
+        from datetime import datetime
+        IriCls = _get_iri()
+        e_model = IriCls(
+            year=env.get("year", 2024),
+            month=env.get("month", 3),
+            day=env.get("day", 15),
+            hour_ut=env.get("hour_ut", 14.0),
+            lat=tx.get("latitude", 40.0),
+            lon=tx.get("longitude", -105.0),
+            f107=env.get("f107", 150.0),
+        )
+        print(f"  IRI model: {e_model}")
+    else:
+        e_model = ELECTRON_MODELS[e_name]()
+
+    # Build magnetic field model
+    if m_name == "igrf":
+        from datetime import datetime
+        IgrfCls = _get_igrf()
+        date = datetime(
+            env.get("year", 2024),
+            env.get("month", 3),
+            env.get("day", 15),
+        )
+        m_model = IgrfCls(date=date)
+        print(f"  IGRF model: {m_model}")
+    else:
+        m_model = MAGNETIC_MODELS[m_name]()
+
+    # Build collision model
     c_model = COLLISION_MODELS[c_name]()
 
     return Ahwfwc(e_model, m_model, c_model)
