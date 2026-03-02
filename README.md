@@ -1,121 +1,128 @@
 # Ionospheric Ray Tracing
 
-A faithful conversion of the OT Report 75-76 (1975) three-dimensional ray tracing program for ionospheric radio wave propagation. All 47 subroutines from the original Fortran source have been transcribed (via OCR), corrected, and individually tested.
+3D ionospheric ray tracing engine based on OT Report 75-76 (1975). Implements Hamilton's equations for radio wave propagation through a magnetized, collisional plasma.
 
-## Current Status
+**Three implementations, one algorithm:**
 
-**All subroutines converted and tested.** The program successfully reproduces the sample case from OT Report 75-76 using real ionospheric models (Chapman layer, dipole magnetic field, EXPZ2 collisions, Appleton-Hartree extraordinary ray).
+| Engine | Language | Time/ray | Notes |
+|--------|----------|----------|-------|
+| `raytrace_core` | **Rust** (PyO3) | **0.028 ms** | Production — 23× faster than Fortran |
+| `ft_raytrace` | Fortran | 0.64 ms | Original port — all 47 subroutines |
+| `pyraytrace` | Python | 2.65 ms | Prototyping — extensible models |
 
-### Steps Completed
-
-1. **Phase 1 — Ionospheric Models:** 17 electron density models (ELECT1, EXPX, BULGE, GAUSEL, TABLEX, CHAPX, VCHAPX, DCHAPT, LINEAR, QPARAB, TORUS, DTORUS, TROUGH, SHOCK, WAVE, WAVE2, DOPPLER)
-2. **Phase 1b — Magnetic Field & Collisions:** 8 models (CONSTY, DIPOLY, CUBEY, HARMONY, CONSTZ, TABLEZ, EXPZ, EXPZ2)
-3. **Phase 2 — Refractive Index:** 11 formulas including Appleton-Hartree (4 variants), Booker Quartic (2 variants), and Sen-Wyller (2 variants + 3 helpers)
-4. **Phase 3 — Ray Tracing Engine:** HAMLTN, RKAM, TRACE, REACH, BACKUP, POLCAR
-5. **Phase 4 — I/O & Main:** NITIAL, READW, PRINTR, RAYPLT, BLOCK_DATA
-6. **Validation:** End-to-end tests reproducing the sample case from OT 75-76
-
-### Test Results
-
-| Category                   | Tests | Status      |
-|----------------------------|-------|-------------|
-| Electron density models    | 17    | ✅ All pass |
-| Magnetic field models      | 4     | ✅ All pass |
-| Collision frequency models | 4     | ✅ All pass |
-| Refractive index formulas  | 10    | ✅ All pass |
-| Ray tracing engine         | 6     | ✅ All pass |
-| I/O subroutines            | 2     | ✅ All pass |
-| End-to-end integration     | 4     | ✅ All pass |
-| **Total**                  | **47**| **✅ All pass** |
-
-### Performance
-
-| Benchmark                   | Result              |
-|-----------------------------|---------------------|
-| 100 rays × 20 steps        | **1.15 ms** total   |
-| Per integration step        | **0.58 µs**         |
-| vs. CDC 3800 (1975)         | **~15,600× faster** |
+All three produce identical results for the OT 75-76 sample case: **max height 74.08 km**, ray returns to ground.
 
 ## Project Structure
 
 ```
 packages/
-├── ft_raytrace/          # Fortran ray tracing engine
-│   ├── src/              # All 47 subroutines (.f files)
-│   ├── test/             # Individual + end-to-end tests
-│   ├── fpm.toml          # Fortran Package Manager config
-│   └── *.dat             # Data files for tabulated models
-├── backend/              # Python/FastAPI backend (for future web UI)
-│   ├── main.py
-│   ├── Dockerfile
-│   └── requirements.txt
-apps/
-├── frontend/             # Static frontend (HTML/CSS/JS)
-└── hello_fortran_example/ # Simple Fortran example
+├── raytrace_core/        # 🚀 Rust engine with Python bindings (PyO3)
+│   ├── src/lib.rs        # Full physics + integrator (~850 lines)
+│   └── Cargo.toml
+├── pyraytrace/           # 🐍 Python package (models, CLI, tests)
+│   ├── pyraytrace/       # Package source
+│   │   ├── core/         # equations.py, integrator.py, tracer.py
+│   │   ├── models/       # electron_density, magnetic_field, collision, rindex
+│   │   ├── cli.py        # CLI entry point
+│   │   └── constants.py  # Physical constants
+│   ├── configs/          # YAML simulation configs
+│   ├── tests/            # 13 pytest tests
+│   └── pyproject.toml
+├── ft_raytrace/          # 🔬 Fortran engine (original port)
+│   ├── src/              # 47 subroutines (.f files)
+│   ├── test/             # Unit + end-to-end tests
+│   └── fpm.toml
+└── backend/              # FastAPI backend (future web UI)
 docs/
 ├── 75-76.pdf             # Original OT Report 75-76
 ├── equations.tex         # Key equations reference
-└── python_conversion_plan.md  # Future Python port plan
+└── python_conversion_plan.md
 ```
-
-## Prerequisites
-
-- **gfortran** (GNU Fortran compiler)
-- **just** (task runner) — `cargo install just` or via package manager
 
 ## Quick Start
 
-```bash
-# Clone the repo
-git clone https://github.com/andrewwetzel/raytracing.git
-cd raytracing
+### Rust Engine (fastest)
 
-# Run ALL Fortran tests (47 assertions)
+```bash
+# Prerequisites: Python 3.11+, Rust 1.70+
+cd packages/pyraytrace
+python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
+.venv/bin/pip install maturin
+
+# Build Rust extension
+cd ../raytrace_core
+VIRTUAL_ENV=../pyraytrace/.venv .venv/bin/maturin develop --release
+
+# Run from Python
+.venv/bin/python -c "
+import raytrace_core
+result = raytrace_core.trace_ray_py(
+    freq_mhz=10.0, ray_mode=-1.0,
+    elevation_deg=20.0, azimuth_deg=45.0, tx_lat_deg=40.0,
+    int_mode=2, step_size=10.0, max_steps=200,
+    e1max=1e-4, e1min=2e-6, e2max=100.0,
+    earth_r=6370.0,
+    fc=10.0, hm=250.0, sh=100.0, alpha=0.5,
+    ed_a=0.0, ed_b=0.0, ed_c=0.0, ed_e=0.0,
+    fh=0.8, nu1=1050000.0, h1=100.0, a1=0.148,
+    nu2=30.0, h2=140.0, a2=0.0183,
+)
+print(f'Max height: {result[\"max_height\"]:.2f} km')
+"
+```
+
+### Python CLI
+
+```bash
+cd packages/pyraytrace
+.venv/bin/python -m pyraytrace run configs/sample_case.yaml
+```
+
+### Fortran
+
+```bash
+# Prerequisites: gfortran, just (task runner)
+just test                    # Run all 47 tests
+just test-e2e-sample-case    # Run sample case validation
+```
+
+### Tests
+
+```bash
+# Python tests (13 assertions)
+cd packages/pyraytrace && .venv/bin/python -m pytest tests/ -v
+
+# Fortran tests (47 assertions)
 just test
-
-# Run a specific subroutine test
-just test-chapx
-just test-ahwfwc
-just test-hamltn
-
-# Run end-to-end integration tests
-just test-e2e-vertical
-just test-e2e-oblique
-just test-e2e-perf
-just test-e2e-sample-case
-
-# Run tests via Fortran Package Manager
-just fpm-test
 ```
 
-## Local Development (Web UI)
+## Physics Models
 
-```bash
-# Start backend + frontend with Docker Compose
-just test-local
+| Category | Models | Used in Sample Case |
+|----------|--------|---------------------|
+| Electron Density | Chapman, Linear, Quasi-parabolic, +14 more | **Chapman (CHAPX)** |
+| Magnetic Field | Dipole, Constant, +2 more | **Dipole (DIPOLY)** |
+| Collision Freq | Double-exponential, Single-exp, Constant, +1 | **EXPZ2** |
+| Refractive Index | Appleton-Hartree (4 variants), Booker Quartic (2), Sen-Wyller (2) | **AHWFWC** |
 
-# Stop local services
-just stop-local
+## Algorithm
+
+The ray tracer solves Hamilton's equations for the ray path through the ionosphere:
+
+```
+dr/dt   = -∂H/∂kr  / (∂H/∂ω · c)
+dθ/dt   = -∂H/∂kθ  / (∂H/∂ω · r · c)
+dφ/dt   = -∂H/∂kφ  / (∂H/∂ω · r·sinθ · c)
+dkr/dt  =  ∂H/∂r   / (∂H/∂ω · c) + ...
 ```
 
-## Deployment
-
-```bash
-# Deploy backend to Cloud Run
-just deploy-backend
-
-# Deploy frontend to Firebase Hosting
-just deploy-frontend
-
-# Deploy both
-just deploy
-```
+where `H = ½(c²k²/ω² - n²)` is the Hamiltonian and `n²` is the complex refractive index from the Appleton-Hartree formula. Integration uses RK4 with Adams-Moulton predictor-corrector.
 
 ## References
 
-- **Foundational Paper:** *A Versatile Three-Dimensional Ray Tracing Computer Program for Radio Waves in the Ionosphere* — R. Michael Jones & Judith J. Stephenson, Office of Telecommunications Report 75-76 (1975). [PDF](https://www.ionolab.org/pubs/OT_Report_75_76.pdf)
-- **PHaRLAP:** Modern FORTRAN HF raytracing engine by the Australian Department of Defence. [Link](https://www.dst.defence.gov.au/our-technologies/pharlap)
-- **PyLap:** Python interface for PHaRLAP by HamSCI. [GitHub](https://github.com/HamSCI/PyLap)
+- **Original Paper:** *A Versatile Three-Dimensional Ray Tracing Computer Program for Radio Waves in the Ionosphere* — R. Michael Jones & Judith J. Stephenson, OT Report 75-76 (1975). [PDF](https://www.ionolab.org/pubs/OT_Report_75_76.pdf)
+- **PHaRLAP:** Modern Fortran HF raytracing engine. [Link](https://www.dst.defence.gov.au/our-technologies/pharlap)
+- **PyLap:** Python interface for PHaRLAP. [GitHub](https://github.com/HamSCI/PyLap)
 
 ## License
 

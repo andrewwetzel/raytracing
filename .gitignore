@@ -47,6 +47,7 @@ node_modules/
 __pycache__/
 *.pyc
 *.pyo
+*.egg-info/
 .venv/
 .venv*/
 
@@ -55,6 +56,13 @@ __pycache__/
 *.mod
 *.exe
 packages/ft_raytrace/build/
+
+# Fortran test binaries (compiled)
+packages/ft_raytrace/test_*
+!packages/ft_raytrace/test/
+
+# Rust build artifacts
+**/target/
 
 # Test results (generated)
 test-results/
@@ -68,6 +76,4 @@ test-results/
 
 # OS
 .DS_Store
-Thumbs.dbpackages/pyraytrace/pyraytrace.egg-info/
-packages/pyraytrace/.venv/
-packages/raytrace_core/target/
+Thumbs.db
