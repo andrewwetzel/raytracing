@@ -24,7 +24,11 @@ const EARTH_RADIUS: f64 = 6370.0;
 #[derive(Clone, Debug)]
 struct ModelParams {
     earth_r: f64,
-    // Electron density (Chapman)
+    // Model selectors: 0=default, 1=alt1, 2=alt2, etc.
+    ed_model: u8,   // 0=chapx, 1=elect1, 2=linear, 3=qparab
+    mag_model: u8,  // 0=dipoly, 1=consty
+    col_model: u8,  // 0=expz2, 1=constz, 2=expz
+    // Electron density params
     fc: f64,
     hm: f64,
     sh: f64,
@@ -33,9 +37,10 @@ struct ModelParams {
     ed_b: f64,
     ed_c: f64,
     ed_e: f64,
-    // Magnetic field (Dipole)
+    ym: f64,  // Semi-thickness for linear/qparab
+    // Magnetic field
     fh: f64,
-    // Collision (Expz2)
+    // Collision
     nu1: f64,
     h1: f64,
     a1: f64,
@@ -48,8 +53,10 @@ impl Default for ModelParams {
     fn default() -> Self {
         Self {
             earth_r: EARTH_RADIUS,
+            ed_model: 0, mag_model: 0, col_model: 0,
             fc: 10.0, hm: 250.0, sh: 100.0, alpha: 0.5,
             ed_a: 0.0, ed_b: 0.0, ed_c: 0.0, ed_e: 0.0,
+            ym: 100.0,
             fh: 0.8,
             nu1: 1_050_000.0, h1: 100.0, a1: 0.148,
             nu2: 30.0, h2: 140.0, a2: 0.0183,
@@ -58,7 +65,7 @@ impl Default for ModelParams {
 }
 
 // ============================================================
-// Electron Density (CHAPX)
+// Electron Density Models
 // ============================================================
 
 struct ElectronDensityResult {
@@ -69,6 +76,17 @@ struct ElectronDensityResult {
     dxdt: f64,
 }
 
+/// Dispatch to the selected electron density model
+fn compute_ed(r: f64, theta: f64, phi: f64, freq_mhz: f64, p: &ModelParams) -> ElectronDensityResult {
+    match p.ed_model {
+        1 => elect1(r, theta, phi, freq_mhz, p),
+        2 => linear(r, theta, phi, freq_mhz, p),
+        3 => qparab(r, theta, phi, freq_mhz, p),
+        _ => chapx(r, theta, phi, freq_mhz, p),
+    }
+}
+
+/// Chapman layer (CHAPX) — default
 fn chapx(r: f64, theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> ElectronDensityResult {
     let theta2 = theta - PID2;
     let hmax = p.hm + p.earth_r * p.ed_e * theta2;
@@ -90,8 +108,71 @@ fn chapx(r: f64, theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> Elect
     ElectronDensityResult { x, dxdr, dxdth, dxdph: 0.0, dxdt: 0.0 }
 }
 
+/// Simple exponential layer (ELECT1)
+fn elect1(r: f64, _theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> ElectronDensityResult {
+    let h = r - p.earth_r;
+    let z = (h - p.hm) / p.sh;
+    let fc_f = p.fc / freq_mhz;
+    let x = fc_f * fc_f * (1.0 - z - (-z).exp()).exp();
+    let dxdr = -x * (1.0 - (-z).exp()) / p.sh;
+
+    ElectronDensityResult { x, dxdr, dxdth: 0.0, dxdph: 0.0, dxdt: 0.0 }
+}
+
+/// Piecewise-linear density (LINEAR)
+fn linear(r: f64, _theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> ElectronDensityResult {
+    let h = r - p.earth_r;
+    let fc_f = p.fc / freq_mhz;
+    let fc2 = fc_f * fc_f;
+
+    let (x, dxdr) = if h <= p.hm {
+        (fc2 * h / p.hm, fc2 / p.hm)
+    } else {
+        let semi = p.ym / 2.0;
+        let z = (h - p.hm) / semi;
+        if z < 1.0 {
+            (fc2 * (1.0 - z * z), fc2 * (-2.0 * z / semi))
+        } else {
+            (0.0, 0.0)
+        }
+    };
+
+    ElectronDensityResult { x, dxdr, dxdth: 0.0, dxdph: 0.0, dxdt: 0.0 }
+}
+
+/// Quasi-parabolic density (QPARAB)
+fn qparab(r: f64, _theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> ElectronDensityResult {
+    let rm = p.earth_r + p.hm;
+    let rb = rm - p.ym / 2.0;
+    let fc_f = p.fc / freq_mhz;
+    let fc2 = fc_f * fc_f;
+
+    if r <= rb || r <= 0.0 {
+        return ElectronDensityResult { x: 0.0, dxdr: 0.0, dxdth: 0.0, dxdph: 0.0, dxdt: 0.0 };
+    }
+
+    let half_ym = p.ym / 2.0;
+    let ratio = (r - rm) / (r * half_ym / rm);
+    let mut x = fc2 * (1.0 - ratio * ratio);
+
+    // Derivative: d/dr of (1 - ((r-rm)*rm / (r*half_ym))^2)
+    let num = (r - rm) * rm;
+    let den = r * half_ym;
+    let term = num / den;
+    let dterm_dr = rm / den - num * rm / (den * den * r); // simplified
+    let dterm_dr2 = (rm * r * half_ym - (r - rm) * rm * half_ym) / (r * half_ym * r * half_ym);
+    let mut dxdr = fc2 * (-2.0 * term * dterm_dr2);
+
+    if x < 0.0 {
+        x = 0.0;
+        dxdr = 0.0;
+    }
+
+    ElectronDensityResult { x, dxdr, dxdth: 0.0, dxdph: 0.0, dxdt: 0.0 }
+}
+
 // ============================================================
-// Magnetic Field (DIPOLY)
+// Magnetic Field Models
 // ============================================================
 
 struct MagneticFieldResult {
@@ -113,6 +194,15 @@ struct MagneticFieldResult {
     dyphdph: f64,
 }
 
+/// Dispatch to selected magnetic field model
+fn compute_mag(r: f64, theta: f64, phi: f64, freq_mhz: f64, p: &ModelParams) -> MagneticFieldResult {
+    match p.mag_model {
+        1 => consty(r, theta, phi, freq_mhz, p),
+        _ => dipoly(r, theta, phi, freq_mhz, p),
+    }
+}
+
+/// Dipole field (DIPOLY) — default
 fn dipoly(r: f64, theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> MagneticFieldResult {
     let sinth = theta.sin();
     let costh = theta.cos();
@@ -141,8 +231,20 @@ fn dipoly(r: f64, theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> Magn
     }
 }
 
+/// Constant field along radial (CONSTY)
+fn consty(_r: f64, _theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> MagneticFieldResult {
+    let y = p.fh / freq_mhz;
+    MagneticFieldResult {
+        y, dydr: 0.0, dydth: 0.0, dydph: 0.0,
+        yr: y, yth: 0.0, yph: 0.0,
+        dyrdr: 0.0, dyrdth: 0.0, dyrdph: 0.0,
+        dythdr: 0.0, dythdth: 0.0, dythdph: 0.0,
+        dyphdr: 0.0, dyphdth: 0.0, dyphdph: 0.0,
+    }
+}
+
 // ============================================================
-// Collision Frequency (EXPZ2)
+// Collision Frequency Models
 // ============================================================
 
 struct CollisionResult {
@@ -152,6 +254,16 @@ struct CollisionResult {
     dzdph: f64,
 }
 
+/// Dispatch to selected collision model
+fn compute_col(r: f64, theta: f64, phi: f64, freq_mhz: f64, p: &ModelParams) -> CollisionResult {
+    match p.col_model {
+        1 => constz(r, theta, phi, freq_mhz, p),
+        2 => expz(r, theta, phi, freq_mhz, p),
+        _ => expz2(r, theta, phi, freq_mhz, p),
+    }
+}
+
+/// Two-term exponential collision (EXPZ2) — default
 fn expz2(r: f64, _theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> CollisionResult {
     let h = r - p.earth_r;
     let omega = PIT2 * freq_mhz * 1.0e6;
@@ -161,6 +273,26 @@ fn expz2(r: f64, _theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> Coll
 
     let z = (exp1 + exp2) / omega;
     let dzdr = (-p.a1 * exp1 - p.a2 * exp2) / omega;
+
+    CollisionResult { z, dzdr, dzdth: 0.0, dzdph: 0.0 }
+}
+
+/// Constant collision frequency (CONSTZ)
+fn constz(_r: f64, _theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> CollisionResult {
+    let omega = PIT2 * freq_mhz * 1.0e6;
+    let z = if omega != 0.0 { p.nu1 / omega } else { 0.0 };
+    CollisionResult { z, dzdr: 0.0, dzdth: 0.0, dzdph: 0.0 }
+}
+
+/// Single exponential collision (EXPZ)
+fn expz(r: f64, _theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> CollisionResult {
+    let h = r - p.earth_r;
+    let omega = PIT2 * freq_mhz * 1.0e6;
+
+    let exp1 = p.nu1 * (-p.a1 * (h - p.h1)).exp();
+
+    let z = exp1 / omega;
+    let dzdr = -p.a1 * exp1 / omega;
 
     CollisionResult { z, dzdr, dzdth: 0.0, dzdph: 0.0 }
 }
@@ -254,10 +386,10 @@ fn ahwfwc(
     let vth = C / om * kth;
     let vph = C / om * kph;
 
-    let ex = chapx(r, theta, phi, freq_mhz, p);
+    let ex = compute_ed(r, theta, phi, freq_mhz, p);
     let x = ex.x;
 
-    let mag = dipoly(r, theta, phi, freq_mhz, p);
+    let mag = compute_mag(r, theta, phi, freq_mhz, p);
     let y_mag = mag.y;
 
     let v2 = vr * vr + vth * vth + vph * vph;
@@ -272,7 +404,7 @@ fn ahwfwc(
     let yt2 = y_mag * y_mag - yl2;
     let yt4 = yt2 * yt2;
 
-    let col = expz2(r, theta, phi, freq_mhz, p);
+    let col = compute_col(r, theta, phi, freq_mhz, p);
     let z = col.z;
 
     // Complex Appleton-Hartree
@@ -790,7 +922,7 @@ fn trace_ray(
     int_mode, step_size, max_steps, e1max, e1min, e2max,
     earth_r, fc, hm, sh, alpha, ed_a, ed_b, ed_c, ed_e,
     fh, nu1, h1, a1, nu2, h2, a2,
-    print_every=10
+    print_every=10, ed_model=0, mag_model=0, col_model=0, ym=100.0
 ))]
 fn trace_ray_py(
     py: Python<'_>,
@@ -805,10 +937,15 @@ fn trace_ray_py(
     nu1: f64, h1: f64, a1: f64,
     nu2: f64, h2: f64, a2: f64,
     print_every: usize,
+    ed_model: u8, mag_model: u8, col_model: u8,
+    ym: f64,
 ) -> PyResult<PyObject> {
     let params = ModelParams {
-        earth_r, fc, hm, sh, alpha,
+        earth_r,
+        ed_model, mag_model, col_model,
+        fc, hm, sh, alpha,
         ed_a, ed_b, ed_c, ed_e,
+        ym,
         fh, nu1, h1, a1, nu2, h2, a2,
     };
 
