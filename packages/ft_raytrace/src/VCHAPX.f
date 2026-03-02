@@ -11,10 +11,12 @@
       PXPR=0.0
       PXPTH=0.0
       PXPPH=0.0
+      PXPT=0.0
       H=R(1)-EARTHR
       IF (H.LE.0.0) GO TO 50
       TAU=(HM/H)**CHI
       X=(FC/F)**2*SQRT(TAU)*EXP(0.5*(1.0-TAU))
       PXPR=.5*X*(TAU-1.0)*CHI/H
-50    RETURN
+ 50   IF (PERT.NE.0.) CALL ELECT1
+      RETURN
       END

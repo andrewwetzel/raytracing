@@ -7,9 +7,11 @@
       DATA MODX(1) /'QPARAB'/
       ENTRY ELECTX
       HMAX=HM
+      X=0.0
       PXPR=0.0
       PXPTH=0.0
       PXPPH=0.0
+      PXPT=0.0
       H=R(1)-EARTHR
       FCF2=(FC/F)**2
       CONST=1.0
@@ -19,5 +21,6 @@
       IF (X.EQ.0.0) GO TO 50
       IF (QUASI.EQ.1.0) CONST=(EARTHR+HM)*(EARTHR+HM-YM)/R(1)**2
       PXPR=-2.0*Z*FCF2/YM*CONST
-50    RETURN
+ 50   IF (PERT.NE.0.) CALL ELECT1
+      RETURN
       END

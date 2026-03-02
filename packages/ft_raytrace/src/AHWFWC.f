@@ -1,0 +1,139 @@
+      SUBROUTINE AHWFWC
+C     CALCULATES THE REFRACTIVE INDEX AND ITS GRADIENT USING THE
+C     APPLETON-HARTREE FORMULA WITH FIELD, WITH COLLISIONS
+      COMMON /CONST/ PI,PIT2,PID2,DEGS,RADIAN,K,C,LOGTEN
+      COMMON /RIN/ MODRIN(3),COLL,FIELD,SPACE,KAY2,H,PHPT,PHPR,PHPTH,
+     1 PHPPH,PHPOM,PHPKR,PHPKTH,PHPKPH,KPHPK,POLAR,LPOLAR,
+     2 SGN
+      COMMON /XX/ MODX(2),X,PXPR,PXPTH,PXPPH,PXPT,HMAX
+      COMMON /YY/ MODY,Y,PYPR,PYPTH,PYPPH,YR,PYRPR,PYRPT,PYRPP,
+     1 YTH,PYTPR,PYTPT,PYTPP,YPH,PYPPR,PYPPT,PYPPP
+      COMMON /ZZ/ MODZ,Z,PZPR,PZPTH,PZPPH
+      COMMON R,TH,PH,KR,KTH,KPH
+      COMMON /WW/ ID(10),WQ,W(400)
+      COMMON /RK/ N,STEP,MODE,E1MAX,E1MIN,E2MAX,E2MIN,FACT,RSTART
+      EQUIVALENCE (RAY,W(1)), (F,W(6))
+      
+      LOGICAL SPACE
+      CHARACTER*8 MODRIN
+      CHARACTER*6 MODX, MODY, MODZ
+      REAL KR,KTH,KPH,K2
+      COMPLEX N2,PNPR,PNPTH,PNPPH,PNPVR,PNPVTH,PNPVPH,NNP,PNPT,
+     1 POLAR,LPOLAR,I,U,RAD,D,PNPPS,PNPX,PNPY,PNPZ,UX,UX2,D2,
+     2 KAY2,H,PHPT,PHPR,PHPTH,PHPPH,PHPOM,PHPKR,PHPKTH,PHPKPH,
+     3 KPHPK, GAM
+      
+      DATA MODRIN /'APPLETON', '-HARTREE', ' FORMULA'/, COLL /1.0/,
+     1 FIELD /1.0/, SGN /1.0/, I /(0.0, 1.0)/, ABSLIM /1.0E-5/
+
+      ENTRY RINDEX
+      OM = PIT2 * F * 1.0E6
+      C2 = C * C
+      K2 = KR*KR + KTH*KTH + KPH*KPH
+      OM2 = OM * OM
+      VR = C/OM * KR
+      VTH = C/OM * KTH
+      VPH = C/OM * KPH
+
+      CALL ELECTX
+      CALL MAGY
+      V2 = VR**2 + VTH**2 + VPH**2
+      VDOTY = VR*YR + VTH*YTH + VPH*YPH
+      
+      YLV = 0.0
+      YL2 = 0.0
+      IF (V2 .NE. 0.0) THEN
+         YLV = VDOTY / V2
+         YL2 = VDOTY**2 / V2
+      END IF
+      
+      YT2 = Y**2 - YL2
+      YT4 = YT2 * YT2
+
+      CALL COLFRZ
+      U = CMPLX(1.0, -Z)
+      UX = U - X
+      UX2 = UX * UX
+      RAD = RAY * CSQRT(YT4 + 4.0*YL2*UX2)
+      D = 2.0*U*UX - YT2 + RAD
+      D2 = D * D
+      N2 = 1.0 - 2.0*X*UX / D
+
+      IF (RAD .NE. CMPLX(0.0, 0.0)) THEN
+         PNPPS = 2.0*X*UX*(-1.0 + (YT2 - 2.0*UX2)/RAD) / D2
+         PNPX = -(2.0*U*UX2 - YT2*(U-2.0*X) + 
+     1          (YT4*(U-2.0*X) + 4.0*YL2*UX*UX2)/RAD) / D2
+         PNPY = 0.0
+         IF (Y .NE. 0.0) THEN
+            PNPY= 2.0*X*UX*(-YT2 + (YT4 + 2.0*YL2*UX2)/RAD) / (D2*Y)
+         END IF
+         PNPZ = I * X * (-2.0*UX2 - YT2 + YT4/RAD) / D2
+      ELSE
+         PNPPS = -2.0*X*UX / D2
+         PNPX = -2.0*U*UX2 / D2
+         PNPY = 0.0
+         PNPZ = I * X * (-2.0*UX2) / D2
+      END IF
+
+C     Compute PPSPR - partial derivatives of sin^2(psi) w.r.t. position
+      PPSPR = 0.0
+      PPSPTH = 0.0
+      PPSPPH = 0.0
+      IF (Y .NE. 0.0) THEN
+        PPSPR = YL2/Y*PYPR - (VR*PYRPR+VTH*PYTPR+VPH*PYPPR)*YLV
+        PPSPTH = YL2/Y*PYPTH - (VR*PYRPT+VTH*PYTPT+VPH*PYPPT)*YLV
+        PPSPPH = YL2/Y*PYPPH - (VR*PYRPP+VTH*PYTPP+VPH*PYPPP)*YLV
+      END IF
+
+      PNPR = PNPX*PXPR + PNPY*PYPR + PNPZ*PZPR + PNPPS*PPSPR
+      PNPTH = PNPX*PXPTH + PNPY*PYPTH + PNPZ*PZPTH + PNPPS*PPSPTH
+      PNPPH = PNPX*PXPPH + PNPY*PYPPH + PNPZ*PZPPH + PNPPS*PPSPPH
+
+      PNPVR = 0.0
+      PNPVTH= 0.0
+      PNPVPH= 0.0
+      IF (V2 .NE. 0.0) THEN
+        PNPVR = PNPPS * (VR*YL2/V2 - YLV*YR)
+        PNPVTH= PNPPS * (VTH*YL2/V2 - YLV*YTH)
+        PNPVPH= PNPPS * (VPH*YL2/V2 - YLV*YPH)
+      END IF
+
+      NNP = N2 - (2.0*X*PNPX + Y*PNPY + Z*PNPZ)
+      PNPT = PNPX * PXPT
+
+      SPACE = REAL(N2) .EQ. 1.0 .AND. ABS(AIMAG(N2)) .LT. ABSLIM
+      
+      POLAR = CMPLX(0.0,0.0)
+      LPOLAR = CMPLX(0.0,0.0)
+      IF (VDOTY .NE. 0.0 .AND. UX .NE. 0.0 .AND. 
+     1   (U+GAM) .NE. 0.0) THEN
+         POLAR = -I * SQRT(V2) * (-YT2 + RAD) / (2.0*VDOTY*UX)
+         GAM = (-YT2 + RAD) / (2.0*UX)
+         LPOLAR = I * X * SQRT(YT2) / (UX*(U+GAM))
+      END IF
+
+      KAY2 = OM2 / C2 * N2
+      IF (RSTART .EQ. 0.0) GO TO 1
+      SCALE = SQRT(REAL(KAY2) / K2)
+      KR = SCALE * KR
+      KTH = SCALE * KTH
+      KPH = SCALE * KPH
+ 1    CONTINUE
+
+C     CALCULATES A HAMILTONIAN H
+      H = 0.5 * (C2*K2/OM2 - N2)
+
+C     AND ITS PARTIAL DERIVATIVES WITH RESPECT TO
+C     TIME, R, THETA, PHI, OMEGA, KR, KTHETA, AND KPHI.
+      PHPT = -PNPT
+      PHPR = -PNPR
+      PHPTH = -PNPTH
+      PHPPH = -PNPPH
+      PHPOM = -NNP / OM
+      PHPKR = C2/OM2*KR - C/OM*PNPVR
+      PHPKTH = C2/OM2*KTH - C/OM*PNPVTH
+      PHPKPH = C2/OM2*KPH - C/OM*PNPVPH
+
+      KPHPK = N2
+      RETURN
+      END

@@ -30,9 +30,114 @@ source-dir = "test"
 main = "test_BULGE.f"
 
 [[test]]
-name = "chapx"
+name = "ahwfwc"
 source-dir = "test"
-main = "test_CHAPX.f"
+main = "test_AHWFWC.f"
+
+[[test]]
+name = "ahwfnc"
+source-dir = "test"
+main = "test_AHWFNC.f"
+
+[[test]]
+name = "ahnfwc"
+source-dir = "test"
+main = "test_AHNFWC.f"
+
+[[test]]
+name = "ahnfnc"
+source-dir = "test"
+main = "test_AHNFNC.f"
+
+[[test]]
+name = "bqwfwc"
+source-dir = "test"
+main = "test_BQWFWC.f"
+
+[[test]]
+name = "bqwfnc"
+source-dir = "test"
+main = "test_BQWFNC.f"
+
+[[test]]
+name = "fresnel"
+source-dir = "test"
+main = "test_FRESNEL.f"
+
+[[test]]
+name = "fsw"
+source-dir = "test"
+main = "test_FSW.f"
+
+[[test]]
+name = "fgsw"
+source-dir = "test"
+main = "test_FGSW.f"
+
+[[test]]
+name = "swwf"
+source-dir = "test"
+main = "test_SWWF.f"
+
+[[test]]
+name = "swnf"
+source-dir = "test"
+main = "test_SWNF.f"
+
+[[test]]
+name = "hamltn"
+source-dir = "test"
+main = "test_HAMLTN.f"
+
+[[test]]
+name = "rkam"
+source-dir = "test"
+main = "test_RKAM.f"
+
+[[test]]
+name = "backup"
+source-dir = "test"
+main = "test_BACKUP.f"
+
+[[test]]
+name = "polcar"
+source-dir = "test"
+main = "test_POLCAR.f"
+
+[[test]]
+name = "reach"
+source-dir = "test"
+main = "test_REACH.f"
+
+[[test]]
+name = "trace"
+source-dir = "test"
+main = "test_TRACE.f"
+
+[[test]]
+name = "readw"
+source-dir = "test"
+main = "test_READW.f"
+
+[[test]]
+name = "printr"
+source-dir = "test"
+main = "test_PRINTR.f"
+
+[[test]]
+name = "e2e_vertical"
+source-dir = "test"
+main = "test_e2e_vertical.f"
+
+[[test]]
+name = "e2e_oblique"
+source-dir = "test"
+main = "test_e2e_oblique.f"
+
+[[test]]
+name = "e2e_perf"
+source-dir = "test"
+main = "test_e2e_perf.f"
 
 [[test]]
 name = "dchapt"
@@ -80,6 +185,16 @@ source-dir = "test"
 main = "test_VCHAPX.f"
 
 [[test]]
+name = "wave"
+source-dir = "test"
+main = "test_WAVE.f"
+
+[[test]]
+name = "wave2"
+source-dir = "test"
+main = "test_WAVE2.f"
+
+[[test]]
 name = "elect1"
 source-dir = "test"
 main = "test_elect1.f"
@@ -93,3 +208,48 @@ main = "test_expx.f"
 name = "gausel"
 source-dir = "test"
 main = "test_gausel.f"
+
+[[test]]
+name = "consty"
+source-dir = "test"
+main = "test_CONSTY.f"
+
+[[test]]
+name = "dipoly"
+source-dir = "test"
+main = "test_DIPOLY.f"
+
+[[test]]
+name = "cubey"
+source-dir = "test"
+main = "test_CUBEY.f"
+
+[[test]]
+name = "harmony"
+source-dir = "test"
+main = "test_HARMONY.f"
+
+[[test]]
+name = "tablez"
+source-dir = "test"
+main = "test_TABLEZ.f"
+
+[[test]]
+name = "constz"
+source-dir = "test"
+main = "test_CONSTZ.f"
+
+[[test]]
+name = "expz"
+source-dir = "test"
+main = "test_EXPZ.f"
+
+[[test]]
+name = "expz2"
+source-dir = "test"
+main = "test_EXPZ2.f"
+
+[[test]]
+name = "expz"
+source-dir = "test"
+main = "test_EXPZ.f"

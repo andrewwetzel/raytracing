@@ -1,0 +1,18 @@
+      SUBROUTINE CONSTZ
+C     CONSTANT COLLISION FREQUENCY
+      COMMON /CONST/ PI, PIT2, PID2, DUM(5)
+      COMMON /ZZ/ MODZ, Z, PZPR, PZPTH, PZPPH
+      COMMON R(6) /WW/ ID(10), WQ, W(400)
+      EQUIVALENCE (EARTHR, W(2)), (F, W(6)), (NU, W(251)), (HMIN,W(252))
+      REAL NU
+      CHARACTER*6 MODZ
+      DATA MODZ /'CONSTZ'/
+      ENTRY COLFRZ
+      H = R(1) - EARTHR
+      Z = 0.0
+      PZPR = 0.0
+      PZPTH = 0.0
+      PZPPH = 0.0
+      IF (H .GT. HMIN) Z = NU / (PIT2 * F * 1.0E6)
+      RETURN
+      END

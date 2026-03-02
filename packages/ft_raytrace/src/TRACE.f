@@ -1,0 +1,183 @@
+      SUBROUTINE TRACE
+C     CALCULATES THE RAY PATH
+      DIMENSION ROLD(20), DROLD(20)
+      COMMON /RK/ N,STEP,MODE,E1MAX,E1MIN,E2MAX,E2MIN,FACT,RSTART
+      COMMON /FLG/ NTYP,NEWWR,NEWWP,PENET,LINES,IHOP,HPUNCH
+      COMMON /TRAC/ GROUND,PERIGE,THERE,MINDIS,NEWRAY,SMT
+      COMMON /RIN/ MODRIN(3),COLL,FIELD,SPACE,KAY2,KAY2I,H,HI,PHPT,
+     1 PHPTI,PHPR,PHPRI,PHPTH,PHPTHI,PHPPH,PHPPHI,PHPOM,PHPOMI,
+     2 PHPKR,PHPKRI,PHPKTH,PHPKTI,PHPKPH,PHPKPI,KPHPK,KPHPKI,
+     3 POLAR,POLARI,LPOLAR,LPOLRI,SGN
+      COMMON /XX/ MODX(2),X,PXPR,PXPTH,PXPPH,PXPT,HMAX
+      COMMON R(20),T,STP,DRDT(20) 
+      COMMON /WW/ ID(10),WQ,W(400)
+      
+      LOGICAL SPACE,HOME,WASNT,GROUND,PERIGE,THERE,MINDIS,NEWWR,
+     1 NEWWP,PENET,NEWRAY,WAS
+      REAL MAXSTP, NTYP, HPUNCH, APHT, HTMAX, SMT
+      COMPLEX KAY2,KAY2I,H,HI,PHPT,PHPTI,PHPR,PHPRI,PHPTH,PHPTHI
+      COMPLEX PHPPH,PHPPHI,PHPOM,PHPOMI,PHPKR,PHPKRI,PHPKTH,PHPKTI
+      COMPLEX PHPKPH,PHPKPI,KPHPK,KPHPKI,POLAR,POLARI,LPOLAR,LPOLRI
+      CHARACTER*8 MODRIN
+      
+      EQUIVALENCE (EARTHR, W(2)), (RCVRH, W(20)), (HOP, W(22)), 
+     1 (MAXSTP, W(23)), (SKIP, W(71)), (RAYSET, W(72)), (PLT, W(81))
+      
+      REAL EARTHR, RCVRH, HOP, SKIP, RAYSET, PLT, H_VAL
+      
+      NHOP = HOP
+      MAX = MAXSTP
+      NSKIP = SKIP
+      RSTART = 1.0
+      
+      CALL HAMLTN
+      HOME = DRDT(1) * (R(1) - EARTHR - RCVRH) .GE. 0.0
+      
+      IHOP = 0
+      CALL PRINTR('XHTR    ', 0.0)
+      IF (PLT .NE. 0.0) CALL RAYPLT
+      HTMAX = 0.0
+      NEWRAY = .TRUE.
+      THERE = R(1)-EARTHR .EQ. RCVRH
+
+C     LOOP ON NUMBER OF HOPS
+ 10   IHOP = IHOP + 1
+      IF (IHOP .GT. NHOP) THEN
+        PENET = .FALSE.
+        APHT = RCVRH
+        RETURN
+      END IF
+
+C     LOOP ON MAXIMUM NUMBER OF STEPS PER HOP
+      DO 79 J=1,MAX
+        H_VAL = R(1) - EARTHR
+        IF (ABS(H_VAL - RCVRH) .GT. ABS(APHT - RCVRH)) APHT = H_VAL
+        HTMAX = AMAX1(H_VAL, HTMAX)
+        
+        IF (.NOT. SPACE) GO TO 12
+        CALL REACH
+        RSTART = 1.0
+        H_VAL = R(1) - EARTHR
+        IF (ABS(H_VAL - RCVRH) .GT. ABS(APHT-RCVRH)) APHT = H_VAL
+        HTMAX = AMAX1(H_VAL, HTMAX)
+        IF (.NOT. SPACE) GO TO 12
+        IF (PERIGE) CALL PRINTR('PERIGEE ', 0.0)
+        IF (THERE) GO TO 51
+        IF (MINDIS) GO TO 40
+        IF (GROUND) GO TO 60
+        IF (PLT .NE. 0.0) CALL RAYPLT
+        IF (PERIGE) GO TO 79
+        
+ 12     DO L=1,N
+          ROLD(L) = R(L)
+          DROLD(L) = DRDT(L)
+        END DO
+        TOLD = T
+        WAS = THERE
+        
+        CALL RKAM
+        
+        H_VAL = R(1) - EARTHR
+        THERE = .FALSE.
+        WASNT = .NOT. HOME
+        HOME = DRDT(1)*(H_VAL - RCVRH) .GE. 0.0
+        
+        TMP = DRDT(1) - DROLD(1)
+        SMT = 0.0
+        IF (TMP .NE. 0.0) THEN
+           SMT = 0.5 * DRDT(1)**2 * (T - TOLD) / ABS(TMP)
+        END IF
+        
+        IF ((H_VAL-RCVRH)*(ROLD(1)-EARTHR-RCVRH) .LT. 0.0 .AND. 
+     1      .NOT. WAS .OR.
+     2      (WAS .AND. DRDT(1)*DROLD(1) .LT. 0.0 .AND. HOME)) GO TO 50
+        
+        IF (HOME .AND. WASNT) GO TO 30
+        
+        IF (H_VAL .LT. 0.0 .OR. DRDT(1) .GT. 0.0 .AND. DROLD(1) .LT. 0.0 
+     1      .AND. SMT .GT. H_VAL) GO TO 20
+
+        IF (DROLD(1) .LT. 0.0 .AND. DRDT(1) .GT. 0.0) 
+     1      CALL PRINTR('PERIGEE ', 0.0)
+        IF (DROLD(1) .GT. 0.0 .AND. DRDT(1) .LT. 0.0) 
+     1      CALL PRINTR('APOGEE  ', 0.0)
+        IF (DROLD(2)*DRDT(2) .LT. 0.0) CALL PRINTR('MAX LAT ', 0.0)
+        IF (DROLD(3)*DRDT(3) .LT. 0.0) CALL PRINTR('MAX LONG', 0.0)
+        
+        DO I=4,6
+          IF (ROLD(I)*R(I) .LT. 0.0) CALL PRINTR('WAVE REV', 0.0)
+        END DO
+        
+        GO TO 75
+
+C       RAY WENT UNDERGROUND
+ 20     CALL BACKUP(0.0)
+        GO TO 60
+
+C       RAY MAY HAVE MADE A CLOSEST APPROACH
+ 30     CALL GRAZE(RCVRH)
+        IF (THERE) GO TO 51
+
+ 40     DRDT(1) = 0.0
+        HPUNCH = R(1) - EARTHR
+        CALL PRINTR('MIN DIST', RAYSET)
+        IF (PLT .NE. 0.0) CALL RAYPLT
+        IF (IHOP .GE. NHOP) RETURN
+        IHOP = IHOP + 1
+        CALL PRINTR('MIN DIST', RAYSET)
+        GO TO 89
+
+C       RAY CROSSED RECEIVER HEIGHT
+ 50     CALL BACKUP(RCVRH)
+        THERE = .TRUE.
+ 51     R(1) = EARTHR + RCVRH
+        HTMAX = AMAX1(RCVRH, HTMAX)
+        HPUNCH = APHT
+        CALL PRINTR('RCVR    ', RAYSET)
+        IF (PLT .NE. 0.0) CALL RAYPLT
+        IF (RCVRH .NE. 0.0) GO TO 89
+        IF (IHOP .GE. NHOP) RETURN
+        IHOP = IHOP + 1
+        APHT = RCVRH
+        GO TO 89
+
+C       GROUND REFLECT
+ 60     R(1) = EARTHR
+        IF (ABS(RCVRH) .GT. ABS(APHT-RCVRH)) APHT = RCVRH
+        R(4) = ABS(R(4))
+        DRDT(1) = ABS(DRDT(1))
+        RSTART = 1.0
+        HPUNCH = HTMAX
+        CALL PRINTR('GRND REF', RAYSET)
+        HTMAX = 0.0
+        IF (RCVRH .NE. 0.0) GO TO 65
+        THERE = .TRUE.
+        HPUNCH = APHT
+        CALL PRINTR('RCVR    ', RAYSET)
+        GO TO 89
+
+ 65     H_VAL = 0.0
+        THERE = .FALSE.
+        APHT = 0.0
+
+ 75     IF (PLT .NE. 0.0) CALL RAYPLT
+        IF (H_VAL .GT. HMAX .AND. H_VAL .GT. RCVRH .AND. 
+     1      DRDT(1) .GT. 0.0) GO TO 90
+        IF (MOD(J, MAX0(1, INT(NSKIP))) .EQ. 0) 
+     1      CALL PRINTR('        ', 0.0)
+ 79   CONTINUE
+
+C     EXCEEDED MAXIMUM NUMBER OF STEPS
+      HPUNCH = H_VAL
+      CALL PRINTR('STEP MAX', RAYSET)
+      RETURN
+
+ 89   HOME = .TRUE.
+      GO TO 10
+      
+C     RAY PENETRATION
+ 90   PENET = .TRUE.
+      HPUNCH = H_VAL
+      CALL PRINTR('PENETRAT', RAYSET)
+      RETURN
+      END

@@ -1,0 +1,29 @@
+      SUBROUTINE CUBEY
+C     CONSTANT DIP.
+C     GYROFREQ DECREASES AS CUBE OF DISTANCE FROM CENTER OF EARTH.
+C     THIS MODEL HAS SAME HEIGHT VARIATION AS A DIPOLE FIELD.
+      COMMON /YY/ MODY, Y, PYPR, PYPTH, PYPPH, YR, PYRPR, PYRPT, PYRPP,
+     1 YTH, PYTPR, PYTPT, PYTPP, YPH, PYPPR, PYPPT, PYPPP
+      COMMON R(6) /WW/ ID(10), WQ, W(400)
+      EQUIVALENCE (EARTHR, W(2)), (F, W(6)), (FH, W(201)), (DIP, W(202))
+      CHARACTER*6 MODY
+      DATA MODY /'CUBEY '/
+      ENTRY MAGY
+      Y = (EARTHR/R(1))**3 * FH / F
+      YR = Y * SIN(DIP)
+      YTH = Y * COS(DIP)
+      PYPR = -3.0 * Y / R(1)
+      PYRPR = -3.0 * YR / R(1)
+      PYTPR = -3.0 * YTH / R(1)
+      PYPTH = 0.0
+      PYPPH = 0.0
+      PYRPT = 0.0
+      PYRPP = 0.0
+      PYTPT = 0.0
+      PYTPP = 0.0
+      YPH = 0.0
+      PYPPR = 0.0
+      PYPPT = 0.0
+      PYPPP = 0.0
+      RETURN
+      END

@@ -1,0 +1,10 @@
+      SUBROUTINE RINDEX
+      COMMON /RIN/ MODRIN(3),COLL,FIELD,SPACE,N2,N2I,PNP(10),
+     1 POLAR(2),LPOLAR(2)
+      LOGICAL SPACE
+      REAL N2,N2I,LPOLAR
+      N2 = 1.0
+      N2I = 0.0
+      SPACE = .FALSE.
+      RETURN
+      END

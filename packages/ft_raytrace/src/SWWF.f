@@ -1,0 +1,246 @@
+      SUBROUTINE SWWF
+C     CALCULATES THE REFRACTIVE INDEX AND ITS GRADIENT USING THE
+C     SEN-WYLLER FORMULA -- WITH FIELD
+      COMMON /CONST/ PI,PIT2,PID2,DEGS,RADIAN,K,SEA,LOGTEN
+      COMMON /RIN/ MODRIN(3),COLL,FIELD,SPACE,KAY2,KAY2I,
+     1 H,HI,PHPT,PHPTI,PHPR,PHPRI,PHPTH,PHPTHI,PHPPH,PHPPHI,
+     2 PHPOM,PHPOMI,PHPKR,PHPKRI,PHPKTH,PHPKTI,PHPKPH,PHPKPI,
+     3 KPHPK,KPHPKI,POLAR,POLARI,LPOLAR,LPOLRI,SGN
+      COMMON /XX/ MODX(2),X,PXPR,PXPTH,PXPPH,PXPT,HMAX
+      COMMON /YY/ MODY,Y,PYPR,PYPTH,PYPPH,YR,PYRPR,PYRPT,PYRPP,YTH,
+     1 PYTPR,PYTPT,PYTPP,YPH,PYPPR,PYPPT,PYPPP
+      COMMON /ZZ/ MODZ,Z,PZPR,PZPTH,PZPPH
+      COMMON /RK/ N,STEP,MODE,E1MAX,E1MIN,E2MAX,E2MIN,FACT,RSTART
+      COMMON R(6) /WW/ ID(10),WQ,W(400)
+      EQUIVALENCE (RAY,W(1)), (F,W(6))
+
+      LOGICAL SPACE
+      CHARACTER*6 MODX, MODY, MODZ
+      CHARACTER*8 MODRIN
+      REAL KR,KTH,KPH,K2,OM,C2,OM2,VR,VTH,VPH,V2,VDOTY,YL2,YT2,Y2
+      REAL S2PSI,C2PSI,SCALE,PPSPR,PPSPTH,PPSPPH,YLV,OMY,OPY,Z2
+      
+      COMPLEX KAY2,KAY2I,H,HI,PHPT,PHPTI,PHPR,PHPRI,PHPTH,PHPTHI
+      COMPLEX PHPPH,PHPPHI,PHPOM,PHPOMI,PHPKR,PHPKRI,PHPKTH,PHPKTI
+      COMPLEX PHPKPH,PHPKPI,KPHPK,KPHPKI,POLAR,POLARI,LPOLAR,LPOLRI
+      COMPLEX I,U,RAD,D,PNPPS,PNPX,PNPY,PNPZ,UX,UX2,U2,UPX
+      COMPLEX ALPHA,BETA,GAMMA,A,B,C,TEMP1,TEMP2,TEMP3
+      COMPLEX ALPOAL,BEPOBE,GAPOGA,CB2,N2M1,DUDZ
+      COMPLEX DAL,DBET,DGAM,DADY,DADZ,DBOY,DBDZ,DCOY,DCOZ
+      COMPLEX DT1DX,DT1DY,DT1DZ,DT1DPS,DT2DX,DT2DY,DT2DZ,DT2DPS
+      COMPLEX DRADDX,DRADDY,DRADDZ,DRADDPS,DDDX,DDDY,DDDZ,DDDPS
+      COMPLEX N2,PNPR,PNPTH,PNPPH,PNPVR,PNPVTH,PNPVPH,NNP,PNPT,COSPSI
+      
+      DATA MODRIN /'SEN-WYLL','ER FORMU','LA      '/
+      DATA COLL /1.0/, FIELD /1.0/
+      DATA I /(0.0, 1.0)/, ABSLIM /1.0E-5/
+
+      ENTRY RINDEX
+      
+      KAY2I = CMPLX(0.0,0.0)
+      HI = CMPLX(0.0,0.0)
+      PHPTI = CMPLX(0.0,0.0)
+      PHPRI = CMPLX(0.0,0.0)
+      PHPTHI = CMPLX(0.0,0.0)
+      PHPPHI = CMPLX(0.0,0.0)
+      PHPOMI = CMPLX(0.0,0.0)
+      PHPKRI = CMPLX(0.0,0.0)
+      PHPKTI = CMPLX(0.0,0.0)
+      PHPKPI = CMPLX(0.0,0.0)
+      KPHPKI = CMPLX(0.0,0.0)
+      POLARI = CMPLX(0.0,0.0)
+      LPOLRI = CMPLX(0.0,0.0)
+      
+      KR = R(4)
+      KTH= R(5)
+      KPH= R(6)
+      
+      OM = PIT2 * 1.0E6 * F
+      C2 = SEA * SEA
+      K2 = KR*KR + KTH*KTH + KPH*KPH
+      OM2 = OM * OM
+      
+      VR = SEA/OM * KR
+      VTH = SEA/OM * KTH
+      VPH = SEA/OM * KPH
+      
+      CALL ELECTX
+      CALL MAGY
+      
+      OPY = 1.0 + Y
+      OMY = 1.0 - Y
+      
+      CALL COLFRZ
+      Z2 = Z * Z
+      
+      CALL FSW(1.0/Z, ALPHA, DAL)
+      ALPOAL = DAL / ALPHA
+      
+      CALL FSW(OMY/Z, BETA, DBET)
+      BEPOBE = DBET / BETA
+      
+      CALL FSW(OPY/Z, GAMMA, DGAM)
+      GAPOGA = DGAM / GAMMA
+      
+      DUDZ = (1.0 + ALPOAL/Z) / ALPHA
+      U = Z / ALPHA
+      U2 = U * U
+      UX = U - X
+      UX2 = UX * UX
+      UPX = U + X
+      
+      B = ALPHA / BETA
+      DBOY = B * BEPOBE / Z
+      DBDZ = -B * (ALPOAL - OMY*BEPOBE) / Z2
+      
+      C = ALPHA / GAMMA
+      DCOY = -C * GAPOGA / Z
+      DCOZ = -C * (ALPOAL - OPY*GAPOGA) / Z2
+      
+      A = 0.5*(B + C) - 1.0
+      DADY = 0.5*(DBOY + DCOY)
+      DADZ = 0.5*(DBDZ + DCOZ)
+      
+      TEMP3 = (1.0 - B)*C / U2 + A*U*UPX
+      
+      V2 = VR**2 + VTH**2 + VPH**2
+      VDOTY = VR*YR + VTH*YTH + VPH*YPH
+      
+      YLV = 0.0
+      YL2 = 0.0
+      IF (V2 .NE. 0.0) THEN
+         YLV = VDOTY / V2
+         YL2 = VDOTY**2 / V2
+      END IF
+      
+      YT2 = Y**2 - YL2
+      Y2 = Y * Y
+      
+      S2PSI = 1.0
+      C2PSI = 0.0
+      IF (Y2 .NE. 0.0) THEN
+         S2PSI = YT2 / Y2
+         C2PSI = YL2 / Y2
+      END IF
+      
+      CB2 = (C - B)**2
+      
+      TEMP1 = TEMP3 * S2PSI
+      DT1DX = A * U * S2PSI
+      DT1DY = (U*UPX*DADY - U2*(B*DCOY + C*DBOY)) * S2PSI
+      DT1DZ = (2.0*U*DUDZ*(1.0 - B*C + A) + A*X*DUDZ - 
+     1        U2*(B*DCOZ + C*DBDZ) + U*UPX*DADZ) * S2PSI
+     
+      DT1DPS = CMPLX(0.0, 0.0)
+      IF (YT2 .NE. 0.0) DT1DPS = 2.0 * TEMP1 / YT2
+      
+      TEMP2 = U2 * CB2 * UX2 * C2PSI
+      DT2DX = -2.0 * UX * U2 * CB2 * C2PSI
+      DT2DY = 2.0 * U2 * UX2 * C2PSI * (C - B)*(DCOY - DBOY)
+      DT2DZ = 2.0 * U2 * UX2 * C2PSI * (C - B)*(DCOZ - DBDZ) + 
+     1        2.0 * TEMP2 * (1.0/U + 1.0/UX) * DUDZ
+      
+      DT2DPS = CMPLX(0.0, 0.0)
+      IF (YL2 .NE. 0.0) DT2DPS = -2.0 * TEMP2 / YL2
+      
+      RAD = SGN * RAY * CSQRT(TEMP1**2 + TEMP2)
+      
+      IF (CABS(RAD) .LE. 1.0E-10) THEN
+         DRADDX = CMPLX(0.0, 0.0)
+         DRADDY = CMPLX(0.0, 0.0)
+         DRADDZ = CMPLX(0.0, 0.0)
+         DRADDPS= CMPLX(0.0, 0.0)
+      ELSE
+         DRADDX = (TEMP1*DT1DX + 0.5*DT2DX) / RAD
+         DRADDY = (TEMP1*DT1DY + 0.5*DT2DY) / RAD
+         DRADDZ = (TEMP1*DT1DZ + 0.5*DT2DZ) / RAD
+         DRADDPS= (TEMP1*DT1DPS + 0.5*DT2DPS) / RAD
+      END IF
+      
+      D = 2.0*U*UX*(1.0 + A) - TEMP1 + RAD + 2.0*A*U*X*S2PSI
+      
+      DDDX = -2.0*U*(1.0 + A) - DT1DX + DRADDX + 2.0*A*U*S2PSI
+      DDDY = 2.0*U*UX*DADY - DT1DY + DRADDY + 2.0*U*X*S2PSI*DADY
+      DDDZ = 2.0*(1.0 + A)*DUDZ*(U + UX) + 2.0*U*UX*DADZ - DT1DZ + 
+     1       DRADDZ + 2.0*X*S2PSI*(A*DUDZ + U*DADZ)
+     
+      DDDPS = -DT1DPS + DRADDPS
+      IF (Y2 .NE. 0.0) DDDPS = DDDPS + 4.0*A*U*X/Y2
+      
+      N2M1 = -2.0*X*(UX + U*A*S2PSI) / D
+      N2 = 1.0 + N2M1
+      
+      PNPX = -(UX + U*A*S2PSI)*(1.0 - X*DDDX/D)/D + X/D
+      PNPY = -X*U*S2PSI/D*DADY - 0.5*N2M1/D*DDDY
+      PNPZ = -X*(1.0 + A*S2PSI)/D*DUDZ - X*U*S2PSI/D*DADZ 
+     1       - 0.5*N2M1/D*DDDZ
+     
+      PNPPS = 0.5*N2M1/D*DDDPS
+      IF (Y2 .NE. 0.0) PNPPS = PNPPS + 2.0*X*U*A/(D*Y2)
+      
+      PPSPR = 0.0
+      PPSPTH= 0.0
+      PPSPPH= 0.0
+      IF (Y .NE. 0.0) THEN
+         PPSPR = YL2/Y*PYPR - (VR*PYRPR + VTH*PYTPR + VPH*PYPPR)*YLV
+         PPSPTH= YL2/Y*PYPTH- (VR*PYRPT + VTH*PYTPT + VPH*PYPPT)*YLV
+         PPSPPH= YL2/Y*PYPPH- (VR*PYRPP + VTH*PYTPP + VPH*PYPPP)*YLV
+      END IF
+
+      PNPR  = PNPX*PXPR + PNPY*PYPR + PNPZ*PZPR + PNPPS*PPSPR
+      PNPTH = PNPX*PXPTH+ PNPY*PYPTH+ PNPZ*PZPTH+ PNPPS*PPSPTH
+      PNPPH = PNPX*PXPPH+ PNPY*PYPPH+ PNPZ*PZPPH+ PNPPS*PPSPPH
+      
+      PNPVR = 0.0
+      PNPVTH= 0.0
+      PNPVPH= 0.0
+      IF (V2 .NE. 0.0) THEN
+         PNPVR = PNPPS*(VR*YL2/V2 - YLV*YR)
+         PNPVTH= PNPPS*(VTH*YL2/V2 - YLV*YTH)
+         PNPVPH= PNPPS*(VPH*YL2/V2 - YLV*YPH)
+      END IF
+      
+      NNP = N2 - (2.0*X*PNPX + Y*PNPY + Z*PNPZ)
+      PNPT = PNPX * PXPT
+      
+      SPACE = REAL(N2) .EQ. 1.0 .AND. ABS(AIMAG(N2)) .LT. ABSLIM
+      
+      KAY2 = OM2 / C2 * N2
+      IF (RSTART .EQ. 0.0) GO TO 1
+      IF (REAL(K2) .NE. 0.0) THEN
+         SCALE = SQRT(REAL(KAY2)/K2)
+         KR = SCALE * KR
+         KTH= SCALE * KTH
+         KPH= SCALE * KPH
+      END IF
+ 1    CONTINUE
+
+      H = 0.5*(C2*K2/OM2 - N2)
+      
+      PHPT = -PNPT
+      PHPR = -PNPR
+      PHPTH = -PNPTH
+      PHPPH = -PNPPH
+      PHPOM = -NNP / OM
+      PHPKR = C2/OM2*KR - SEA/OM*PNPVR
+      PHPKTH= C2/OM2*KTH- SEA/OM*PNPVTH
+      PHPKPH= C2/OM2*KPH- SEA/OM*PNPVPH
+      
+      KPHPK = N2
+
+      POLAR = CMPLX(0.0,0.0)
+      LPOLAR= CMPLX(0.0,0.0)
+      IF (U*UX*(C-B)*VDOTY .NE. CMPLX(0.0,0.0)) THEN
+         POLAR = I*(TEMP1 - RAD)*Y*SQRT(V2) / (U*UX*(C-B)*VDOTY)
+         COSPSI = VDOTY / (Y * SQRT(V2))
+         LPOLAR= (0.5*I*(C-B)*POLAR + A*COSPSI)*SQRT(S2PSI) / 
+     1           (UX*(1.0 + 0.5*I*(C-B)*COSPSI*POLAR) + 
+     2           A*(U - X*C2PSI))
+      END IF
+      
+      R(4) = KR
+      R(5) = KTH
+      R(6) = KPH
+      
+      RETURN
+      END
