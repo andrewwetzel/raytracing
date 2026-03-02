@@ -43,6 +43,12 @@ class FanTraceRequest(BaseModel):
     fh: float = Field(0.8, description="Gyrofrequency at surface (MHz)")
     step_size: float = Field(5.0, ge=1.0, le=50.0, description="Integration step")
     max_steps: int = Field(500, ge=50, le=2000, description="Max integration steps")
+    # Model selectors
+    ed_model: int = Field(0, ge=0, le=5, description="Electron density model")
+    mag_model: int = Field(0, ge=0, le=3, description="Magnetic field model")
+    col_model: int = Field(0, ge=0, le=2, description="Collision model")
+    rindex_model: int = Field(0, ge=0, le=3, description="Refractive index model")
+    pert_model: int = Field(0, ge=0, le=5, description="Perturbation model")
 
 
 @app.post("/api/trace/fan")
@@ -80,6 +86,11 @@ def trace_fan(req: FanTraceRequest):
             nu1=1050000.0, h1=100.0, a1=0.148,
             nu2=30.0, h2=140.0, a2=0.0183,
             print_every=1,
+            ed_model=req.ed_model,
+            mag_model=req.mag_model,
+            col_model=req.col_model,
+            rindex_model=req.rindex_model,
+            pert_model=req.pert_model,
         )
 
         # Compute ground range from theta changes
@@ -87,16 +98,19 @@ def trace_fan(req: FanTraceRequest):
         points = []
         for pt in result["points"]:
             h = pt["height_km"]
-            t = pt["t"]  # group path in km
-            # Approximate ground range from geometry
-            r = earth_r + h
-            # For visualization: use t as horizontal dist, h as vertical
-            points.append({"h": round(h, 2), "t": round(t, 2)})
+            t = pt["t"]
+            points.append({
+                "h": round(h, 2), "t": round(t, 2),
+                "lat": round(pt["lat_deg"], 4),
+                "lon": round(pt["lon_deg"], 4),
+                "range": round(pt["ground_range_km"], 1),
+            })
 
         rays.append({
             "elev": round(elev, 1),
             "max_h": round(result["max_height"], 2),
             "ground": result["returned_to_ground"],
+            "range_km": round(result["ground_range_km"], 1),
             "pts": points,
         })
 
@@ -220,6 +234,92 @@ def api_coverage(req: CoverageRequest):
         "elapsed_ms": result.elapsed_ms,
     }
 
+
+# ============================================================
+# Export endpoints
+# ============================================================
+
+@app.post("/api/export/kml")
+def export_kml(req: FanTraceRequest):
+    """Export fan trace as KML for Google Earth visualization."""
+    from fastapi.responses import Response
+
+    # Re-use the trace logic
+    fan_result = trace_fan(req)
+    rays = fan_result["rays"]
+
+    kml_lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<kml xmlns="http://www.opengis.net/kml/2.2">',
+        '<Document>',
+        f'  <name>Ray Trace {req.freq_mhz} MHz</name>',
+        '  <Style id="rayReturned"><LineStyle><color>ff00ff00</color><width>2</width></LineStyle></Style>',
+        '  <Style id="rayEscaped"><LineStyle><color>ff0000ff</color><width>1</width></LineStyle></Style>',
+    ]
+
+    for ray in rays:
+        style = "rayReturned" if ray["ground"] else "rayEscaped"
+        kml_lines.append(f'  <Placemark>')
+        kml_lines.append(f'    <name>Elev {ray["elev"]}°</name>')
+        kml_lines.append(f'    <description>Max height: {ray["max_h"]} km, Range: {ray.get("range_km", 0)} km</description>')
+        kml_lines.append(f'    <styleUrl>#{style}</styleUrl>')
+        kml_lines.append(f'    <LineString>')
+        kml_lines.append(f'      <altitudeMode>absolute</altitudeMode>')
+        coords = []
+        for pt in ray["pts"]:
+            lon = pt.get("lon", 0.0)
+            lat = pt.get("lat", req.tx_lat_deg)
+            alt = pt["h"] * 1000  # km → m
+            coords.append(f'{lon},{lat},{alt:.0f}')
+        kml_lines.append(f'      <coordinates>{" ".join(coords)}</coordinates>')
+        kml_lines.append(f'    </LineString>')
+        kml_lines.append(f'  </Placemark>')
+
+    kml_lines.extend(['</Document>', '</kml>'])
+
+    return Response(
+        content="\n".join(kml_lines),
+        media_type="application/vnd.google-earth.kml+xml",
+        headers={"Content-Disposition": "attachment; filename=raytrace.kml"},
+    )
+
+
+@app.post("/api/export/geojson")
+def export_geojson(req: FanTraceRequest):
+    """Export fan trace as GeoJSON for mapping tools."""
+    fan_result = trace_fan(req)
+    rays = fan_result["rays"]
+
+    features = []
+    for ray in rays:
+        coords = []
+        for pt in ray["pts"]:
+            lon = pt.get("lon", 0.0)
+            lat = pt.get("lat", req.tx_lat_deg)
+            alt = pt["h"]
+            coords.append([lon, lat, alt])
+        features.append({
+            "type": "Feature",
+            "properties": {
+                "elevation_deg": ray["elev"],
+                "max_height_km": ray["max_h"],
+                "ground_range_km": ray.get("range_km", 0),
+                "returned": ray["ground"],
+            },
+            "geometry": {
+                "type": "LineString",
+                "coordinates": coords,
+            },
+        })
+
+    return {
+        "type": "FeatureCollection",
+        "features": features,
+        "properties": {
+            "freq_mhz": req.freq_mhz,
+            "n_rays": len(rays),
+        },
+    }
 
 # Serve frontend
 frontend_dir = os.path.abspath(

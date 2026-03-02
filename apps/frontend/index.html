@@ -1,32 +1,36 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ionospheric Ray Tracer</title>
     <meta name="description" content="Interactive 3D ionospheric ray tracing visualization">
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
     <div id="app">
         <!-- Header -->
         <header id="header">
             <div class="logo">
                 <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-                    <circle cx="14" cy="14" r="12" stroke="url(#grad1)" stroke-width="2" fill="none"/>
-                    <path d="M6 20 Q14 4 22 20" stroke="url(#grad2)" stroke-width="1.5" fill="none"/>
-                    <path d="M8 18 Q14 6 20 18" stroke="url(#grad2)" stroke-width="1" fill="none" opacity="0.6"/>
+                    <circle cx="14" cy="14" r="12" stroke="url(#grad1)" stroke-width="2" fill="none" />
+                    <path d="M6 20 Q14 4 22 20" stroke="url(#grad2)" stroke-width="1.5" fill="none" />
+                    <path d="M8 18 Q14 6 20 18" stroke="url(#grad2)" stroke-width="1" fill="none" opacity="0.6" />
                     <defs>
                         <linearGradient id="grad1" x1="0" y1="0" x2="28" y2="28">
-                            <stop offset="0%" stop-color="#6366f1"/>
-                            <stop offset="100%" stop-color="#06b6d4"/>
+                            <stop offset="0%" stop-color="#6366f1" />
+                            <stop offset="100%" stop-color="#06b6d4" />
                         </linearGradient>
                         <linearGradient id="grad2" x1="0" y1="0" x2="28" y2="0">
-                            <stop offset="0%" stop-color="#f43f5e"/>
-                            <stop offset="50%" stop-color="#f59e0b"/>
-                            <stop offset="100%" stop-color="#6366f1"/>
+                            <stop offset="0%" stop-color="#f43f5e" />
+                            <stop offset="50%" stop-color="#f59e0b" />
+                            <stop offset="100%" stop-color="#6366f1" />
                         </linearGradient>
                     </defs>
                 </svg>
@@ -118,9 +122,62 @@
                 </label>
             </div>
 
+            <div class="control-section">
+                <h2>Physics Models</h2>
+                <label>
+                    <span>Electron Density</span>
+                    <select id="ed-model">
+                        <option value="0">Chapman (CHAPX)</option>
+                        <option value="1">ELECT1</option>
+                        <option value="2">Linear</option>
+                        <option value="3">Quasi-Parabolic</option>
+                        <option value="4">Variable Chapman</option>
+                        <option value="5">Dual Chapman</option>
+                    </select>
+                </label>
+                <label>
+                    <span>Magnetic Field</span>
+                    <select id="mag-model">
+                        <option value="0">Dipole (DIPOLY)</option>
+                        <option value="1">Constant (CONSTY)</option>
+                        <option value="2">Cubic (CUBEY)</option>
+                        <option value="3">IGRF-14 (HARMONY)</option>
+                    </select>
+                </label>
+                <label>
+                    <span>Refractive Index</span>
+                    <select id="rindex-model">
+                        <option value="0">Full AH (AHWFWC)</option>
+                        <option value="1">No Field/Col (fast)</option>
+                        <option value="2">No Field (AHNFWC)</option>
+                        <option value="3">No Col (AHWFNC)</option>
+                    </select>
+                </label>
+                <label>
+                    <span>Perturbation</span>
+                    <select id="pert-model">
+                        <option value="0">None</option>
+                        <option value="1">Torus</option>
+                        <option value="2">Trough</option>
+                        <option value="3">Shock (TID)</option>
+                        <option value="4">Bulge</option>
+                        <option value="5">Exponential</option>
+                    </select>
+                </label>
+            </div>
+
             <button id="trace-btn" class="trace-button">
                 <span class="btn-icon">▶</span> Trace Rays
             </button>
+
+            <div class="export-buttons">
+                <button id="export-kml" class="export-btn" disabled>
+                    <span class="btn-icon">🌍</span> Export KML
+                </button>
+                <button id="export-geojson" class="export-btn" disabled>
+                    <span class="btn-icon">📍</span> Export GeoJSON
+                </button>
+            </div>
 
             <div id="info-panel" class="info-panel">
                 <p class="info-hint">Hover over rays for details</p>
@@ -130,4 +187,5 @@
 
     <script src="script.js"></script>
 </body>
+
 </html>

@@ -264,7 +264,7 @@ function drawRays(elevMin, elevMax) {
 
     for (let j = 0; j < ray.pts.length; j++) {
       const pt = ray.pts[j];
-      const pos = toCanvas(pt.t, pt.h);
+      const pos = toCanvas(pt.range || pt.t, pt.h);
 
       if (j === 0) {
         ctx.moveTo(pos.x, pos.y);
@@ -281,7 +281,7 @@ function drawRays(elevMin, elevMax) {
       ctx.beginPath();
       for (let j = 0; j < ray.pts.length; j++) {
         const pt = ray.pts[j];
-        const pos = toCanvas(pt.t, pt.h);
+        const pos = toCanvas(pt.range || pt.t, pt.h);
         j === 0 ? ctx.moveTo(pos.x, pos.y) : ctx.lineTo(pos.x, pos.y);
       }
       ctx.stroke();
@@ -363,6 +363,10 @@ async function traceRays() {
     fh: parseFloat(document.getElementById('fh').value),
     step_size: 5.0,
     max_steps: 500,
+    ed_model: parseInt(document.getElementById('ed-model').value),
+    mag_model: parseInt(document.getElementById('mag-model').value),
+    rindex_model: parseInt(document.getElementById('rindex-model').value),
+    pert_model: parseInt(document.getElementById('pert-model').value),
   };
 
   try {
@@ -380,10 +384,15 @@ async function traceRays() {
     }
 
     rays = data.rays;
+    lastTraceBody = body; // Store for export
 
     // Update stats
     document.getElementById('stat-rays').textContent = `${data.n_rays} rays`;
     document.getElementById('stat-time').textContent = `${data.elapsed_ms} ms`;
+
+    // Enable export buttons
+    document.getElementById('export-kml').disabled = false;
+    document.getElementById('export-geojson').disabled = false;
 
     render();
   } catch (err) {
@@ -414,7 +423,7 @@ function handleMouseMove(e) {
     const ray = rays[i];
     for (let j = 0; j < ray.pts.length; j++) {
       const pt = ray.pts[j];
-      const pos = toCanvas(pt.t, pt.h);
+      const pos = toCanvas(pt.range || pt.t, pt.h);
       const dx = pos.x - mx;
       const dy = pos.y - my;
       const dist = Math.sqrt(dx * dx + dy * dy);
@@ -441,10 +450,12 @@ function updateInfoPanel() {
   }
 
   const ray = rays[hoveredRay];
+  const rangeStr = ray.range_km ? `${ray.range_km} km` : '—';
   panel.innerHTML = `
         <dl class="ray-detail">
             <dt>Elevation</dt><dd>${ray.elev}°</dd>
             <dt>Max Height</dt><dd>${ray.max_h} km</dd>
+            <dt>Ground Range</dt><dd>${rangeStr}</dd>
             <dt>Ground Return</dt><dd>${ray.ground ? '✅ Yes' : '❌ No'}</dd>
             <dt>Points</dt><dd>${ray.pts.length}</dd>
         </dl>
@@ -488,6 +499,38 @@ function wireControls() {
   // Resize
   window.addEventListener('resize', render);
 }
+let lastTraceBody = null;
+
+async function exportFile(format) {
+  if (!lastTraceBody) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/export/${format}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(lastTraceBody),
+    });
+    if (format === 'kml') {
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'raytrace.kml';
+      a.click();
+      URL.revokeObjectURL(url);
+    } else {
+      const data = await res.json();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'raytrace.geojson';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  } catch (err) {
+    console.error('Export failed:', err);
+  }
+}
 
 // ============================================================
 // Init
@@ -495,6 +538,10 @@ function wireControls() {
 
 document.addEventListener('DOMContentLoaded', () => {
   wireControls();
+
+  document.getElementById('export-kml').addEventListener('click', () => exportFile('kml'));
+  document.getElementById('export-geojson').addEventListener('click', () => exportFile('geojson'));
+
   render();
   // Auto-trace on load
   traceRays();
