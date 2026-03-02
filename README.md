@@ -17,7 +17,7 @@ All three produce identical results for the OT 75-76 sample case: **max height 7
 ```
 packages/
 ├── raytrace_core/        # 🚀 Rust engine with Python bindings (PyO3)
-│   ├── src/lib.rs        # Full physics + integrator (~850 lines)
+│   ├── src/lib.rs        # Full physics + integrator (~1570 lines)
 │   └── Cargo.toml
 ├── pyraytrace/           # 🐍 Python package (models, CLI, tests)
 │   ├── pyraytrace/       # Package source
@@ -98,12 +98,29 @@ just test
 
 ## Physics Models
 
-| Category | Models | Used in Sample Case |
-|----------|--------|---------------------|
-| Electron Density | Chapman, Linear, Quasi-parabolic, +14 more | **Chapman (CHAPX)** |
-| Magnetic Field | Dipole, Constant, +2 more | **Dipole (DIPOLY)** |
-| Collision Freq | Double-exponential, Single-exp, Constant, +1 | **EXPZ2** |
-| Refractive Index | Appleton-Hartree (4 variants), Booker Quartic (2), Sen-Wyller (2) | **AHWFWC** |
+All models from the original Fortran codebase are available in the Rust engine via selector parameters:
+
+| Category | Selector | Models |
+|----------|----------|--------|
+| **Electron Density** | `ed_model=0..5` | CHAPX (default), ELECT1, LINEAR, QPARAB, VCHAPX, DCHAPT |
+| **ED Perturbations** | `pert_model=0..5` | none (default), TORUS, TROUGH, SHOCK, BULGE, EXPX |
+| **Magnetic Field** | `mag_model=0..3` | DIPOLY (default), CONSTY, CUBEY, HARMONY (IGRF-14) |
+| **Collision Freq** | `col_model=0..2` | EXPZ2 (default), CONSTZ, EXPZ |
+| **Refractive Index** | `rindex_model=0..3` | AHWFWC (default), AHNFNC, AHNFWC, AHWFNC |
+
+The **HARMONY** model embeds real IGRF-14 (epoch 2025.0) spherical harmonic coefficients from NOAA — no external data files needed.
+
+For real ionospheric conditions, the IRI-2020 and IGRF models are also available via the Python layer (see `configs/iri_igrf_sample.yaml`).
+
+### Not Ported
+
+| Model | Reason |
+|-------|--------|
+| **TABLEX** (tabular electron density) | Superseded by IRI-2020 integration, which provides measured ionospheric profiles globally. TABLEX was designed for manually entering ionosonde data — IRI replaces this with a full empirical model. |
+| **TABLEZ** (tabular collision freq) | Same rationale — the built-in exponential models (EXPZ2, EXPZ) cover standard collision profiles adequately. |
+| **HARMONY file I/O** | The Fortran version reads coefficients from a file at runtime. Our Rust port embeds IGRF-14 coefficients at compile time instead, which is faster and requires no external files. |
+| **Booker Quartic** (BQWFWC, BQWFNC) | Specialized formulation for waveguide modes. The Appleton-Hartree variants cover standard HF ray tracing. |
+| **Sen-Wyller** (SWWF, SWNF) | Generalized collision model. Standard exponential collision models are sufficient for most applications. |
 
 ## Algorithm
 
