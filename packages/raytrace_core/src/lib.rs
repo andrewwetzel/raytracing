@@ -48,6 +48,7 @@ struct ModelParams {
     // Magnetic field
     fh: f64,
     dip: f64,  // dip angle for CUBEY (radians)
+    epoch_year: f64, // year for IGRF interpolation (e.g. 2025.0)
     // Collision
     nu1: f64,
     h1: f64,
@@ -70,7 +71,7 @@ impl Default for ModelParams {
             ym: 100.0,
             fc2: 0.0, hm2: 0.0, sh2: 0.0,
             chi: 3.0,
-            fh: 0.8, dip: 0.0,
+            fh: 0.8, dip: 0.0, epoch_year: 2025.0,
             nu1: 1_050_000.0, h1: 100.0, a1: 0.148,
             nu2: 30.0, h2: 140.0, a2: 0.0183,
             pert_model: 0,
@@ -425,180 +426,218 @@ fn cubey(r: f64, _theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> Magn
     }
 }
 
-/// Spherical Harmonic magnetic field (HARMONY) with embedded IGRF-14 (2025.0) coefficients
-/// Port of the Fortran HARMONY subroutine using degree n=1..6 Gauss coefficients
+/// Spherical Harmonic magnetic field (HARMONY) — IGRF-14, degree 1-13
+/// Coefficients for epoch 2025.0 with secular variation for epoch interpolation.
+/// Set p.epoch_year for time interpolation (valid ~2020-2030).
 fn harmony(r: f64, theta: f64, phi: f64, freq_mhz: f64, p: &ModelParams) -> MagneticFieldResult {
-    // IGRF-14 coefficients for epoch 2025.0 (nanoTesla)
-    // GG[m][n], HH[m][n], m=order 0..6, n=degree 0..6
-    const GG: [[f64; 7]; 7] = [
-        [       0.0, -29350.0,  -2556.2,   1360.9,    894.7,   -232.9,     66.0],
-        [       0.0,  -1410.3,   2950.9,  -2404.2,    799.6,    369.0,     65.6],
-        [       0.0,      0.0,   1648.7,   1243.8,     55.8,    187.9,     73.0],
-        [       0.0,      0.0,      0.0,    453.4,   -281.1,   -140.7,   -121.6],
-        [       0.0,      0.0,      0.0,      0.0,     12.0,   -151.2,    -36.1],
-        [       0.0,      0.0,      0.0,      0.0,      0.0,     14.0,     13.6],
-        [       0.0,      0.0,      0.0,      0.0,      0.0,      0.0,    -64.8],
+    const N_MAX: usize = 13;
+    const N_COEFF: usize = 104; // sum(n+1 for n=1..13)
+
+    // IGRF-14 g coefficients for 2025.0 (nT), flat index = sum(i+1, i=1..n-1) + m
+    #[rustfmt::skip]
+    const G0: [f64; N_COEFF] = [
+        -29350.0, -1410.3,
+        -2556.2, 2950.9, 1648.7,
+        1360.9, -2404.2, 1243.8, 453.4,
+        894.7, 799.6, 55.8, -281.1, 12.0,
+        -232.9, 369.0, 187.2, -138.7, -141.9, 20.9,
+        64.3, 63.8, 76.7, -115.7, -40.9, 14.9, -60.8,
+        79.6, -76.9, -8.8, 59.3, 15.8, 2.5, -11.2, 14.3,
+        23.1, 10.9, -17.5, 2.0, -21.8, 16.9, 14.9, -16.8, 1.0,
+        4.7, 8.0, 3.0, -0.2, -2.5, -13.1, 2.4, 8.6, -8.7, -12.8,
+        -1.3, -6.4, 0.2, 2.0, -1.0, -0.5, -0.9, 1.5, 0.9, -2.6, -3.9,
+        3.0, -1.4, -2.5, 2.4, -0.6, 0.0, -0.6, -0.1, 1.1, -1.0, -0.1, 2.6,
+        -2.0, -0.1, 0.4, 1.2, -1.2, 0.6, 0.5, 0.5, -0.1, -0.5, -0.2, -1.2, -0.7,
+        0.2, -0.9, 0.6, 0.7, -0.2, 0.5, 0.1, 0.7, 0.0, 0.3, 0.2, 0.4, -0.5, -0.4,
     ];
-    const HH: [[f64; 7]; 7] = [
-        [       0.0,      0.0,      0.0,      0.0,      0.0,      0.0,      0.0],
-        [       0.0,   4545.5,  -3133.6,    -56.9,    278.6,     47.5,    -19.2],
-        [       0.0,      0.0,   -814.2,    237.6,   -134.0,    208.4,     25.0],
-        [       0.0,      0.0,      0.0,   -549.6,    212.0,   -121.4,     52.8],
-        [       0.0,      0.0,      0.0,      0.0,   -375.4,     32.1,    -64.4],
-        [       0.0,      0.0,      0.0,      0.0,      0.0,     99.1,      9.0],
-        [       0.0,      0.0,      0.0,      0.0,      0.0,      0.0,     68.0],
+    #[rustfmt::skip]
+    const H0: [f64; N_COEFF] = [
+        0.0, 4545.5,
+        0.0, -3133.6, -814.2,
+        0.0, -56.9, 237.6, -549.6,
+        0.0, 278.6, -134.0, 212.0, -375.4,
+        0.0, 45.3, 220.0, -122.9, 42.9, 106.2,
+        0.0, -18.4, 16.8, 48.9, -59.8, 10.9, 72.8,
+        0.0, -48.9, -14.4, -1.0, 23.5, -7.4, -25.1, -2.2,
+        0.0, 7.2, -12.6, 11.5, -9.7, 12.7, 0.7, -5.2, 3.9,
+        0.0, -24.8, 12.1, 8.3, -3.4, -5.3, 7.2, -0.6, 0.8, 9.8,
+        0.0, 3.3, 0.1, 2.5, 5.4, -9.0, 0.4, -4.2, -3.8, 0.9, -9.0,
+        0.0, 0.0, 2.8, -0.6, 0.1, 0.5, -0.3, -1.2, -1.7, -2.9, -1.8, -2.3,
+        0.0, -1.2, 0.6, 1.0, -1.5, 0.0, 0.6, -0.2, 0.8, 0.1, -0.9, 0.1, 0.2,
+        0.0, -0.9, 0.7, 1.2, -0.3, -1.3, -0.1, 0.2, -0.2, 0.5, 0.6, -0.6, -0.3, -0.5,
+    ];
+    // Secular variation (nT/yr) for 2025-2030, degree 1-8 only
+    #[rustfmt::skip]
+    const SVG: [f64; N_COEFF] = [
+        12.6, 10.0,
+        -11.2, -5.3, -8.3,
+        -1.5, -4.4, 0.4, -15.6,
+        -1.7, -2.3, -5.8, 5.4, -6.8,
+        0.6, 1.3, 0.0, 0.7, 2.3, 1.0,
+        -0.2, -0.3, 0.8, 1.2, -0.8, 0.4, 0.9,
+        -0.1, -0.1, -0.1, 0.5, -0.1, -0.8, -0.8, 0.9,
+        -0.1, 0.2, 0.0, 0.4, -0.1, 0.3, 0.1, 0.0, 0.3,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+    ];
+    #[rustfmt::skip]
+    const SVH: [f64; N_COEFF] = [
+        0.0, -21.5,
+        0.0, -27.3, -11.1,
+        0.0, 3.8, -0.2, -3.9,
+        0.0, -1.3, 4.1, 1.6, -4.1,
+        0.0, -0.5, 2.1, 0.5, 1.7, 1.9,
+        0.0, 0.3, -1.6, -0.4, 0.8, 0.7, 0.9,
+        0.0, 0.6, 0.5, -0.7, 0.0, -0.9, 0.5, -0.3,
+        0.0, -0.3, 0.4, -0.3, 0.4, -0.5, -0.6, 0.3, 0.2,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
     ];
 
-    // e/m ratio for electron (C/kg) → convert nT to MHz
-    const EOM: f64 = 1.7589e7;
-    const NN: usize = 7;
-
-    // Precompute A1, B1 coefficients
-    let mut a1 = [[0.0f64; NN]; NN];
-    let mut b1 = [[0.0f64; NN]; NN];
-    for m in 0..NN {
-        for n in 0..NN {
-            let nm = (n + m) as f64;
-            let nmsub = (n as f64) - (m as f64);
-            let denom = (2 * n) as f64 - 1.0;
-            if denom != 0.0 {
-                b1[m][n] = nm * nmsub / denom;
-                a1[m][n] = b1[m][n] / ((2 * n) as f64 + 1.0);
-            }
-        }
+    // Interpolate coefficients to requested epoch
+    let dt = p.epoch_year - 2025.0;
+    let mut gc = [0.0f64; N_COEFF];
+    let mut hc = [0.0f64; N_COEFF];
+    for i in 0..N_COEFF {
+        gc[i] = G0[i] + dt * SVG[i];
+        hc[i] = H0[i] + dt * SVH[i];
     }
 
-    let costhe = theta.cos();
-    let sinthe = theta.sin().max(1.0e-10);  // prevent div by zero at poles
+    // Flat index helper: for degree n, order m → sum(i+1, i=1..n-1) + m
+    let idx = |n: usize, m: usize| -> usize {
+        n * (n + 1) / 2 - 1 + m
+    };
 
+    const EOM: f64 = 1.7589e7; // e/m ratio (C/kg)
+    let costh = theta.cos();
+    let sinth = theta.sin().max(1.0e-10);
     let aor = p.earth_r / r;
-    let paorpr = -aor / r;
-    let mut cnst2 = aor;
-    let mut pcnspr = paorpr;
 
-    // sin(m*phi), cos(m*phi)
-    let mut sinp = [0.0f64; NN];
-    let mut cosp = [0.0f64; NN];
-    for m in 0..NN {
-        sinp[m] = ((m as f64) * phi).sin();
-        cosp[m] = ((m as f64) * phi).cos();
+    // sin/cos(m*phi)
+    let mut sp = [0.0f64; N_MAX + 1];
+    let mut cp = [0.0f64; N_MAX + 1];
+    for m in 0..=N_MAX {
+        sp[m] = ((m as f64) * phi).sin();
+        cp[m] = ((m as f64) * phi).cos();
     }
 
-    // Associated Legendre functions using 1-based indexing (h1[m][n] maps to Fortran H(M,N))
-    let mut h1 = [[0.0f64; 8]; 8];
-    h1[1][1] = 1.0;
-    h1[1][2] = costhe;
-    h1[2][2] = sinthe;
+    // Associated Legendre functions P[n][m] and derivative dP/dtheta
+    // Using Schmidt semi-normalized form with recursion
+    let nn = N_MAX + 2;
+    let mut pp = vec![vec![0.0f64; nn]; nn];
+    let mut dp = vec![vec![0.0f64; nn]; nn];
+    pp[0][0] = 1.0;
+    pp[1][0] = costh;
+    dp[1][0] = -sinth;
+    pp[1][1] = sinth;
+    dp[1][1] = costh;
 
-    for m in 1..=5usize {
-        h1[m + 1][m + 2] = costhe * h1[m + 1][m + 1];
-        h1[m + 2][m + 2] = sinthe * h1[m + 1][m + 1];
-        for n in m..=5usize {
-            h1[m][n + 2] = costhe * h1[m][n + 1] - a1[m - 1][n - 1] * h1[m][n];
-        }
-    }
-
-    // Derivatives G and PHPTH (∂H/∂θ)
-    let mut g1 = [[0.0f64; 8]; 8];
-    let mut phpth = [[0.0f64; 8]; 8];
-    let mut pgpth = [[0.0f64; 8]; 8];
-
-    for m in 1..=6usize {
-        g1[m + 1][m + 1] = -(m as f64) * costhe * h1[m + 1][m + 1];
-        phpth[m + 1][m + 1] = -g1[m + 1][m + 1] / sinthe;
-        pgpth[m + 1][m + 1] = (m as f64) * sinthe * h1[m + 1][m + 1]
-            - (m as f64) * costhe * phpth[m + 1][m + 1];
-        for n in m..=6usize {
-            g1[m][n + 1] = -(n as f64) * costhe * h1[m][n + 1] + b1[m - 1][n - 1] * h1[m][n];
-            phpth[m][n + 1] = -g1[m][n + 1] / sinthe;
-            pgpth[m][n + 1] = (n as f64) * sinthe * h1[m][n + 1]
-                - (n as f64) * costhe * phpth[m][n + 1] + b1[m - 1][n - 1] * phpth[m][n];
+    for n in 2..=N_MAX {
+        let nf = n as f64;
+        // m = 0
+        pp[n][0] = ((2.0 * nf - 1.0) * costh * pp[n - 1][0] - (nf - 1.0) * pp[n - 2][0]) / nf;
+        dp[n][0] = nf * (pp[n - 1][0] - costh * pp[n][0]) / sinth;
+        // m = n (sectoral)
+        let fact = ((2.0 * nf - 1.0) / (2.0 * nf)).sqrt();
+        pp[n][n] = fact * sinth * pp[n - 1][n - 1];
+        dp[n][n] = fact * (costh * pp[n - 1][n - 1] + sinth * dp[n - 1][n - 1]);
+        // m = 1..n-1
+        for m in 1..n {
+            let mf = m as f64;
+            let a = (2.0 * nf - 1.0) * costh * pp[n - 1][m];
+            let b = ((nf - 1.0 + mf) * (nf - 1.0 - mf) / ((2.0 * nf - 3.0) * 1.0)).sqrt()
+                * (2.0 * nf - 1.0).sqrt() * pp[n - 2][m];
+            pp[n][m] = (a - b) / ((nf + mf) * (nf - mf)).sqrt();
+            dp[n][m] = nf * costh * pp[n][m] / sinth - ((nf * nf - mf * mf) as f64).sqrt() * pp[n - 1][m] / sinth;
         }
     }
 
     // Accumulate field components
-    let mut fin1 = 0.0f64; let mut pfin1r = 0.0; let mut pfin1t = 0.0; let mut pfin1p = 0.0;
-    let mut fin2 = 0.0f64; let mut pfin2r = 0.0; let mut pfin2t = 0.0; let mut pfin2p = 0.0;
-    let mut fin3 = 0.0f64; let mut pfin3r = 0.0; let mut pfin3t = 0.0; let mut pfin3p = 0.0;
+    let mut br = 0.0f64;
+    let mut bt = 0.0f64;
+    let mut bp = 0.0f64;
+    let mut dbr_dr = 0.0f64;
+    let mut dbr_dt = 0.0f64;
+    let mut dbr_dp = 0.0f64;
+    let mut dbt_dr = 0.0f64;
+    let mut dbt_dt = 0.0f64;
+    let mut dbt_dp = 0.0f64;
+    let mut dbp_dr = 0.0f64;
+    let mut dbp_dt = 0.0f64;
+    let mut dbp_dp = 0.0f64;
 
-    for n in 1..NN {
-        let mut cr = 0.0; let mut pcrpth = 0.0; let mut pcrpph = 0.0;
-        let mut cth = 0.0; let mut pcthpt = 0.0; let mut pcthpp = 0.0;
-        let mut cph = 0.0; let mut pcphpt = 0.0; let mut pcphpp = 0.0;
+    let mut rn = aor * aor; // (a/r)^2
+    for n in 1..=N_MAX {
+        rn *= aor; // (a/r)^(n+2)
+        let nf = n as f64;
+        let drn_dr = -(nf + 2.0) * rn / r;
 
         for m in 0..=n {
-            let t1 = GG[m][n] * cosp[m] + HH[m][n] * sinp[m];
-            let m_f = m as f64;
-            let t2 = m_f * (HH[m][n] * cosp[m] - GG[m][n] * sinp[m]);
+            let mf = m as f64;
+            let i = idx(n, m);
+            let g = gc[i];
+            let h = hc[i];
 
-            // Use 1-based indexing: Fortran M → m+1, N → n+1 (since n starts at 1 here)
-            let mi = m + 1;
-            let ni = n + 1;
-            if mi < 8 && ni < 8 {
-                cr += h1[mi][ni] * t1;
-                pcrpth += phpth[mi][ni] * t1;
-                pcrpph += h1[mi][ni] * t2;
-                cth += g1[mi][ni] * t1;
-                pcthpt += pgpth[mi][ni] * t1;
-                pcthpp += g1[mi][ni] * t2;
-                cph += h1[mi][ni] * t2;
-                pcphpt += phpth[mi][ni] * t2;
-                pcphpp -= h1[mi][ni] * (m_f * m_f) * t1;
-            }
+            let cos_term = g * cp[m] + h * sp[m];
+            let sin_term = mf * (h * cp[m] - g * sp[m]);
+
+            let p_nm = pp[n][m];
+            let dp_nm = dp[n][m];
+
+            br += (nf + 1.0) * rn * cos_term * p_nm;
+            bt += -rn * cos_term * dp_nm;
+            bp += -rn * sin_term * p_nm / sinth;
+
+            dbr_dr += (nf + 1.0) * drn_dr * cos_term * p_nm;
+            dbr_dt += (nf + 1.0) * rn * cos_term * dp_nm;
+            dbr_dp += (nf + 1.0) * rn * (-sin_term / mf.max(1.0) * mf) * p_nm;
+
+            dbt_dr += -drn_dr * cos_term * dp_nm;
+            // d²P/dθ² approximated via recursion identity
+            let d2p = -nf * (nf + 1.0) * p_nm + mf * mf / (sinth * sinth) * p_nm + costh / sinth * dp_nm;
+            dbt_dt += -rn * cos_term * d2p;
+            dbt_dp += -rn * (-sin_term / mf.max(1.0) * mf) * dp_nm;
+
+            dbp_dr += -drn_dr * sin_term * p_nm / sinth;
+            dbp_dt += -rn * sin_term * (dp_nm * sinth - p_nm * costh) / (sinth * sinth);
+            let cos2_term = -mf * mf * (g * cp[m] + h * sp[m]);
+            dbp_dp += -rn * cos2_term * p_nm / sinth;
         }
-
-        cnst2 *= aor;
-        pcnspr = cnst2 * paorpr + aor * pcnspr;
-        let n_f = n as f64;
-
-        fin1 += n_f * cnst2 * cr;
-        pfin1r += n_f * pcnspr * cr;
-        pfin1t += n_f * cnst2 * pcrpth;
-        pfin1p += n_f * cnst2 * pcrpph;
-
-        fin2 += cnst2 * cth;
-        pfin2r += pcnspr * cth;
-        pfin2t += cnst2 * pcthpt;
-        pfin2p += cnst2 * pcthpp;
-
-        fin3 += cnst2 * cph;
-        pfin3r += pcnspr * cph;
-        pfin3t += cnst2 * pcphpt;
-        pfin3p += cnst2 * pcphpp;
     }
 
-    let htheta = -fin2 / sinthe;
-    let hphi = fin3 / sinthe;
-
-    // Convert from nT to normalized gyrofrequency Y = fH/f
-    let conv = -EOM / PIT2 * 1.0e-6 / freq_mhz;
-    let yr = conv * (-fin1);
-    let yth = conv * htheta;
-    let yph = conv * hphi;
-
+    // Convert from nT to normalized gyrofrequency
+    let conv = EOM / PIT2 * 1.0e-6 / freq_mhz;
+    let yr = conv * br;
+    let yth = conv * bt;
+    let yph = conv * bp;
     let y = (yr * yr + yth * yth + yph * yph).sqrt().max(1.0e-10);
 
-    let pyrpr = conv * (-pfin1r);
-    let pytpr = conv * (-pfin2r / sinthe);
-    let pyppr = conv * (pfin3r / sinthe);
-    let dydr = (yr * pyrpr + yth * pytpr + yph * pyppr) / y;
+    let dyrdr = conv * dbr_dr;
+    let dyrdth = conv * dbr_dt;
+    let dyrdph = conv * dbr_dp;
+    let dythdr = conv * dbt_dr;
+    let dythdth = conv * dbt_dt;
+    let dythdph = conv * dbt_dp;
+    let dyphdr = conv * dbp_dr;
+    let dyphdth = conv * dbp_dt;
+    let dyphdph = conv * dbp_dp;
 
-    let pyrpt = conv * (-pfin1t);
-    let pytpt = conv * (-(pfin2t / sinthe + htheta * costhe / sinthe));
-    let pyppt = conv * (pfin3t / sinthe - hphi * costhe / sinthe);
-    let dydth = (yr * pyrpt + yth * pytpt + yph * pyppt) / y;
-
-    let pyrpp = conv * (-pfin1p);
-    let pytpp = conv * (-pfin2p / sinthe);
-    let pyppp = conv * (pfin3p / sinthe);
-    let dydph = (yr * pyrpp + yth * pytpp + yph * pyppp) / y;
+    let dydr = (yr * dyrdr + yth * dythdr + yph * dyphdr) / y;
+    let dydth = (yr * dyrdth + yth * dythdth + yph * dyphdth) / y;
+    let dydph = (yr * dyrdph + yth * dythdph + yph * dyphdph) / y;
 
     MagneticFieldResult {
         y, dydr, dydth, dydph,
         yr, yth, yph,
-        dyrdr: pyrpr, dyrdth: pyrpt, dyrdph: pyrpp,
-        dythdr: pytpr, dythdth: pytpt, dythdph: pytpp,
-        dyphdr: pyppr, dyphdth: pyppt, dyphdph: pyppp,
+        dyrdr, dyrdth, dyrdph,
+        dythdr, dythdth, dythdph,
+        dyphdr, dyphdth, dyphdph,
     }
 }
 
@@ -1530,7 +1569,8 @@ fn trace_ray(
     print_every=10, ed_model=0, mag_model=0, col_model=0, ym=100.0,
     rindex_model=0, dip=0.0, fc2=0.0, hm2=0.0, sh2=0.0, chi=3.0,
     pert_model=0, p1=0.0, p2=0.0, p3=0.0, p4=0.0, p5=0.0,
-    p6=0.0, p7=0.0, p8=0.0, p9=0.0
+    p6=0.0, p7=0.0, p8=0.0, p9=0.0,
+    epoch_year=2025.0
 ))]
 fn trace_ray_py(
     py: Python<'_>,
@@ -1552,6 +1592,7 @@ fn trace_ray_py(
     pert_model: u8,
     p1: f64, p2: f64, p3: f64, p4: f64, p5: f64,
     p6: f64, p7: f64, p8: f64, p9: f64,
+    epoch_year: f64,
 ) -> PyResult<PyObject> {
     let params = ModelParams {
         earth_r,
@@ -1559,7 +1600,7 @@ fn trace_ray_py(
         fc, hm, sh, alpha,
         ed_a, ed_b, ed_c, ed_e,
         ym, fc2, hm2, sh2, chi,
-        fh, dip,
+        fh, dip, epoch_year,
         nu1, h1, a1, nu2, h2, a2,
         pert_model,
         p1, p2, p3, p4, p5, p6, p7, p8, p9,
