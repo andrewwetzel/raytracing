@@ -24,10 +24,11 @@ const EARTH_RADIUS: f64 = 6370.0;
 #[derive(Clone, Debug)]
 struct ModelParams {
     earth_r: f64,
-    // Model selectors: 0=default, 1=alt1, 2=alt2, etc.
-    ed_model: u8,   // 0=chapx, 1=elect1, 2=linear, 3=qparab
-    mag_model: u8,  // 0=dipoly, 1=consty
-    col_model: u8,  // 0=expz2, 1=constz, 2=expz
+    // Model selectors
+    ed_model: u8,     // 0=chapx,1=elect1,2=linear,3=qparab,4=vchapx,5=dchapt
+    mag_model: u8,    // 0=dipoly,1=consty,2=cubey
+    col_model: u8,    // 0=expz2,1=constz,2=expz
+    rindex_model: u8, // 0=ahwfwc,1=ahnfnc,2=ahnfwc,3=ahwfnc
     // Electron density params
     fc: f64,
     hm: f64,
@@ -37,9 +38,16 @@ struct ModelParams {
     ed_b: f64,
     ed_c: f64,
     ed_e: f64,
-    ym: f64,  // Semi-thickness for linear/qparab
+    ym: f64,
+    // Second layer for DCHAPT
+    fc2: f64,
+    hm2: f64,
+    sh2: f64,
+    // VCHAPX exponent
+    chi: f64,
     // Magnetic field
     fh: f64,
+    dip: f64,  // dip angle for CUBEY (radians)
     // Collision
     nu1: f64,
     h1: f64,
@@ -47,19 +55,27 @@ struct ModelParams {
     nu2: f64,
     h2: f64,
     a2: f64,
+    // Perturbation params (TORUS/TROUGH/SHOCK/BULGE/EXPX)
+    pert_model: u8,  // 0=none,1=torus,2=trough,3=shock,4=bulge,5=expx
+    p1: f64, p2: f64, p3: f64, p4: f64, p5: f64, p6: f64, p7: f64, p8: f64, p9: f64,
 }
 
 impl Default for ModelParams {
     fn default() -> Self {
         Self {
             earth_r: EARTH_RADIUS,
-            ed_model: 0, mag_model: 0, col_model: 0,
+            ed_model: 0, mag_model: 0, col_model: 0, rindex_model: 0,
             fc: 10.0, hm: 250.0, sh: 100.0, alpha: 0.5,
             ed_a: 0.0, ed_b: 0.0, ed_c: 0.0, ed_e: 0.0,
             ym: 100.0,
-            fh: 0.8,
+            fc2: 0.0, hm2: 0.0, sh2: 0.0,
+            chi: 3.0,
+            fh: 0.8, dip: 0.0,
             nu1: 1_050_000.0, h1: 100.0, a1: 0.148,
             nu2: 30.0, h2: 140.0, a2: 0.0183,
+            pert_model: 0,
+            p1: 0.0, p2: 0.0, p3: 0.0, p4: 0.0, p5: 0.0,
+            p6: 0.0, p7: 0.0, p8: 0.0, p9: 0.0,
         }
     }
 }
@@ -76,14 +92,26 @@ struct ElectronDensityResult {
     dxdt: f64,
 }
 
-/// Dispatch to the selected electron density model
+/// Dispatch to the selected electron density model, then apply perturbation
 fn compute_ed(r: f64, theta: f64, phi: f64, freq_mhz: f64, p: &ModelParams) -> ElectronDensityResult {
-    match p.ed_model {
-        1 => elect1(r, theta, phi, freq_mhz, p),
+    let mut ed = match p.ed_model {
+        1 => elect1_ed(r, theta, phi, freq_mhz, p),
         2 => linear(r, theta, phi, freq_mhz, p),
         3 => qparab(r, theta, phi, freq_mhz, p),
+        4 => vchapx(r, theta, phi, freq_mhz, p),
+        5 => dchapt(r, theta, phi, freq_mhz, p),
         _ => chapx(r, theta, phi, freq_mhz, p),
+    };
+    // Apply perturbation modifier (multiplicative)
+    match p.pert_model {
+        1 => apply_torus(&mut ed, r, theta, phi, p),
+        2 => apply_trough(&mut ed, r, theta, phi, p),
+        3 => apply_shock(&mut ed, r, theta, phi, p),
+        4 => apply_bulge(&mut ed, r, theta, phi, freq_mhz, p),
+        5 => apply_expx_pert(&mut ed, r, p),
+        _ => {}
     }
+    ed
 }
 
 /// Chapman layer (CHAPX) — default
@@ -109,7 +137,7 @@ fn chapx(r: f64, theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> Elect
 }
 
 /// Simple exponential layer (ELECT1)
-fn elect1(r: f64, _theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> ElectronDensityResult {
+fn elect1_ed(r: f64, _theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> ElectronDensityResult {
     let h = r - p.earth_r;
     let z = (h - p.hm) / p.sh;
     let fc_f = p.fc / freq_mhz;
@@ -171,6 +199,140 @@ fn qparab(r: f64, _theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> Ele
     ElectronDensityResult { x, dxdr, dxdth: 0.0, dxdph: 0.0, dxdt: 0.0 }
 }
 
+/// Variable Chapman (VCHAPX) — uses tau = (hm/h)^chi exponent
+fn vchapx(r: f64, _theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> ElectronDensityResult {
+    let h = r - p.earth_r;
+    if h <= 0.0 {
+        return ElectronDensityResult { x: 0.0, dxdr: 0.0, dxdth: 0.0, dxdph: 0.0, dxdt: 0.0 };
+    }
+    let fc_f = p.fc / freq_mhz;
+    let tau = (p.hm / h).powf(p.chi);
+    let x = fc_f * fc_f * tau.sqrt() * (0.5 * (1.0 - tau)).exp();
+    let dxdr = 0.5 * x * (tau - 1.0) * p.chi / h;
+    ElectronDensityResult { x, dxdr, dxdth: 0.0, dxdph: 0.0, dxdt: 0.0 }
+}
+
+/// Dual-layer Chapman (DCHAPT) — two layers with latitude variation
+fn dchapt(r: f64, theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> ElectronDensityResult {
+    let h = r - p.earth_r;
+    if h <= 0.0 {
+        return ElectronDensityResult { x: 0.0, dxdr: 0.0, dxdth: 0.0, dxdph: 0.0, dxdt: 0.0 };
+    }
+    let theta2 = theta - PID2;
+    let earthe = p.earth_r * p.ed_e;
+    let hmax = p.hm + earthe * theta2;
+    let z1 = (h - hmax) / p.sh;
+    let expz1 = 1.0 - (-z1).exp();
+    let temp = 1.0 + p.ed_c * theta2;
+    let fc_f = p.fc / freq_mhz;
+    let x1 = fc_f * fc_f * temp * (0.5 * (expz1 - z1)).exp();
+    let dxdr1 = -0.5 * x1 * expz1 / p.sh;
+    let dxdth1 = x1 * p.ed_c / temp - dxdr1 * earthe;
+    let (mut x, mut dxdr, mut dxdth) = (x1, dxdr1, dxdth1);
+    if p.fc2 != 0.0 {
+        let fc2_f = p.fc2 / freq_mhz;
+        let z2 = (h - p.hm2 - earthe * theta2) / p.sh2;
+        let expz2 = 1.0 - (-z2).exp();
+        let x2 = fc2_f * fc2_f * temp * (0.5 * (expz2 - z2)).exp();
+        let dxdr2 = -0.5 * x2 * expz2 / p.sh2;
+        x += x2;
+        dxdr += dxdr2;
+        dxdth += x2 * p.ed_c / temp - dxdr2 * earthe;
+    }
+    ElectronDensityResult { x, dxdr, dxdth, dxdph: 0.0, dxdt: 0.0 }
+}
+
+// ---- Perturbation modifiers (applied after base ED model) ----
+// p1..p9 map to Fortran W(151)..W(159)
+
+/// Torus perturbation — Gaussian enhancement in tilted coordinates
+fn apply_torus(ed: &mut ElectronDensityResult, r: f64, theta: f64, _phi: f64, p: &ModelParams) {
+    if ed.x == 0.0 && ed.dxdr == 0.0 && ed.dxdth == 0.0 { return; }
+    if p.p1 == 0.0 { return; }
+    let r0 = p.earth_r + p.p5;
+    let z = r - r0;
+    let lambda = r0 * (theta - PID2);
+    let (sinb, cosb) = (p.p4.sin(), p.p4.cos());
+    let pp = lambda * cosb + z * sinb;
+    let yy = z * cosb - lambda * sinb;
+    let delta = p.p1 * (-(pp / p.p2).powi(2) - (yy / p.p3).powi(2)).exp();
+    let del1 = delta + 1.0;
+    let pdpr = -2.0 * delta * (pp * sinb / (p.p2 * p.p2) + yy * cosb / (p.p3 * p.p3));
+    let pdpt = -2.0 * delta * (pp * r0 * cosb / (p.p2 * p.p2) - yy * r0 * sinb / (p.p3 * p.p3));
+    ed.dxdr = ed.dxdr * del1 + ed.x * pdpr;
+    ed.dxdth = ed.dxdth * del1 + ed.x * pdpt;
+    ed.dxdph *= del1;
+    ed.x *= del1;
+}
+
+/// Trough perturbation — latitude-dependent Gaussian depletion
+fn apply_trough(ed: &mut ElectronDensityResult, _r: f64, theta: f64, _phi: f64, p: &ModelParams) {
+    if ed.x == 0.0 && ed.dxdr == 0.0 && ed.dxdth == 0.0 { return; }
+    if p.p1 == 0.0 { return; }
+    let angle_raw = theta + p.p3 - PID2;
+    let width = if angle_raw > 0.0 { p.p4 * p.p2 } else { p.p2 };
+    let angle = angle_raw / width;
+    let delta = p.p1 * (-angle * angle).exp();
+    let del1 = delta + 1.0;
+    ed.dxdr *= del1;
+    ed.dxdth = ed.dxdth * del1 - 2.0 * ed.x * angle * delta / width;
+    ed.dxdph *= del1;
+    ed.x *= del1;
+}
+
+/// Shock (TID) perturbation — travelling ionospheric disturbance
+fn apply_shock(ed: &mut ElectronDensityResult, r: f64, theta: f64, phi: f64, p: &ModelParams) {
+    if ed.x == 0.0 && ed.dxdr == 0.0 && ed.dxdth == 0.0 { return; }
+    if p.p1 == 0.0 || p.p2 == 0.0 { return; }
+    let h = r - p.earth_r;
+    let rhoc = p.p5 * (h - p.p6) - p.p2;
+    let lon = phi - p.p4;
+    let lat = PID2 - theta - p.p3;
+    let u = lon.cos() * lat.cos();
+    let rho = r * u.acos();
+    let dif = rhoc - rho;
+    let con_base = -9.0 / (p.p2 * p.p2);
+    let cons = p.p1 * (con_base * dif * dif).exp();
+    let c0nst = 1.0 + cons;
+    let con = 2.0 * con_base * cons * dif;
+    ed.dxdr = ed.dxdr * c0nst + ed.x * con * (p.p5 - rho / r);
+    let u2 = u * u;
+    if (1.0 - u2).abs() >= 1.0e-9 {
+        let s = r / (1.0 - u2).sqrt();
+        ed.dxdth = ed.dxdth * c0nst + ed.x * con * s * lon.cos() * lat.sin();
+        ed.dxdph = ed.dxdph * c0nst - ed.x * con * s * lat.cos() * lon.sin();
+    } else {
+        ed.dxdth *= c0nst;
+        ed.dxdph *= c0nst;
+    }
+    ed.x *= c0nst;
+}
+
+/// Bulge perturbation — equatorial enhancement
+fn apply_bulge(ed: &mut ElectronDensityResult, r: f64, theta: f64, phi: f64, _freq: f64, p: &ModelParams) {
+    if p.p2 <= 0.0 || p.p3 == 0.0 { return; }
+    let hmax = p.p1 + 5.0 * p.p2;
+    let h = r - (p.earth_r + hmax);
+    let e = (h / p.p2).exp();
+    let hsc2 = if p.p7 != 0.0 { p.p7 } else { 1.0 };
+    let hsc3 = if p.p8 != 0.0 { p.p8 } else { 1.0 };
+    let frac_term = p.p4 * (-((theta - p.p5) / hsc2).powi(2) - ((phi - p.p6) / hsc3).powi(2)).exp();
+    let x_add = p.p3 * e * (1.0 + frac_term);
+    ed.x += x_add;
+    ed.dxdr += x_add / p.p2;
+    ed.dxdth += -2.0 * p.p4 * x_add * (theta - p.p5) / (hsc2 * hsc2);
+}
+
+/// Exponential perturbation (EXPX)
+fn apply_expx_pert(ed: &mut ElectronDensityResult, r: f64, p: &ModelParams) {
+    if p.p2 <= 0.0 || p.p3 == 0.0 { return; }
+    let hmax = p.p1 + 5.0 * p.p2;
+    let h = r - (p.earth_r + hmax);
+    let x_add = p.p3 * (h / p.p2).exp();
+    ed.x += x_add;
+    ed.dxdr += x_add / p.p2;
+}
+
 // ============================================================
 // Magnetic Field Models
 // ============================================================
@@ -198,6 +360,7 @@ struct MagneticFieldResult {
 fn compute_mag(r: f64, theta: f64, phi: f64, freq_mhz: f64, p: &ModelParams) -> MagneticFieldResult {
     match p.mag_model {
         1 => consty(r, theta, phi, freq_mhz, p),
+        2 => cubey(r, theta, phi, freq_mhz, p),
         _ => dipoly(r, theta, phi, freq_mhz, p),
     }
 }
@@ -239,6 +402,24 @@ fn consty(_r: f64, _theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> Ma
         yr: y, yth: 0.0, yph: 0.0,
         dyrdr: 0.0, dyrdth: 0.0, dyrdph: 0.0,
         dythdr: 0.0, dythdth: 0.0, dythdph: 0.0,
+        dyphdr: 0.0, dyphdth: 0.0, dyphdph: 0.0,
+    }
+}
+
+/// Cubic field with constant dip (CUBEY)
+/// Same height variation as dipole but with fixed dip angle
+fn cubey(r: f64, _theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> MagneticFieldResult {
+    let y = (p.earth_r / r).powi(3) * p.fh / freq_mhz;
+    let yr = y * p.dip.sin();
+    let yth = y * p.dip.cos();
+    let dydr = -3.0 * y / r;
+    let dyrdr = -3.0 * yr / r;
+    let dythdr = -3.0 * yth / r;
+    MagneticFieldResult {
+        y, dydr, dydth: 0.0, dydph: 0.0,
+        yr, yth, yph: 0.0,
+        dyrdr, dyrdth: 0.0, dyrdph: 0.0,
+        dythdr, dythdth: 0.0, dythdph: 0.0,
         dyphdr: 0.0, dyphdth: 0.0, dyphdph: 0.0,
     }
 }
@@ -370,6 +551,222 @@ fn cx_sqrt(c: Cx) -> Cx {
 }
 
 fn cx_abs(c: Cx) -> f64 { (c.re * c.re + c.im * c.im).sqrt() }
+
+/// Dispatch to selected refractive index model
+fn compute_rindex(
+    r: f64, theta: f64, phi: f64,
+    kr: f64, kth: f64, kph: f64,
+    freq_mhz: f64, ray_mode: f64,
+    p: &ModelParams, rstart: bool,
+) -> RindexResult {
+    match p.rindex_model {
+        1 => ahnfnc(r, theta, phi, kr, kth, kph, freq_mhz, ray_mode, p, rstart),
+        2 => ahnfwc(r, theta, phi, kr, kth, kph, freq_mhz, ray_mode, p, rstart),
+        3 => ahwfnc(r, theta, phi, kr, kth, kph, freq_mhz, ray_mode, p, rstart),
+        _ => ahwfwc(r, theta, phi, kr, kth, kph, freq_mhz, ray_mode, p, rstart),
+    }
+}
+
+/// AHNFNC — No Field, No Collisions (simplest/fastest)
+/// n² = 1 - X
+fn ahnfnc(
+    r: f64, theta: f64, phi: f64,
+    kr: f64, kth: f64, kph: f64,
+    freq_mhz: f64, _ray_mode: f64,
+    p: &ModelParams, rstart: bool,
+) -> RindexResult {
+    let om = PIT2 * freq_mhz * 1.0e6;
+    let c2 = C * C;
+    let k2 = kr * kr + kth * kth + kph * kph;
+    let om2 = om * om;
+
+    let ex = compute_ed(r, theta, phi, freq_mhz, p);
+    let x = ex.x;
+
+    let pnpx = -0.5;
+    let n2_re = 1.0 - x;
+    let nnp = n2_re - 2.0 * x * pnpx;
+
+    let space = n2_re == 1.0;
+    let kay2_re = om2 / c2 * n2_re;
+    let (new_kr, new_kth, new_kph) = if rstart && k2 > 0.0 {
+        let scale = (kay2_re / k2).sqrt();
+        (scale * kr, scale * kth, scale * kph)
+    } else {
+        (kr, kth, kph)
+    };
+
+    let h_val = 0.5 * (c2 * k2 / om2 - n2_re);
+
+    RindexResult {
+        n2_re, n2_im: 0.0,
+        h_re: h_val,
+        dhdt_re: -pnpx * ex.dxdt,
+        dhdr_re: -pnpx * ex.dxdr,
+        dhdth_re: -pnpx * ex.dxdth,
+        dhdph_re: -pnpx * ex.dxdph,
+        dhdom_re: -nnp / om,
+        dhdkr_re: c2 / om2 * new_kr,
+        dhdkth_re: c2 / om2 * new_kth,
+        dhdkph_re: c2 / om2 * new_kph,
+        kphpk_re: n2_re, kphpk_im: 0.0,
+        space, new_kr, new_kth, new_kph,
+    }
+}
+
+/// AHNFWC — No Field, With Collisions
+/// n² = 1 - X/(1 - iZ)
+fn ahnfwc(
+    r: f64, theta: f64, phi: f64,
+    kr: f64, kth: f64, kph: f64,
+    freq_mhz: f64, _ray_mode: f64,
+    p: &ModelParams, rstart: bool,
+) -> RindexResult {
+    let om = PIT2 * freq_mhz * 1.0e6;
+    let c2 = C * C;
+    let k2 = kr * kr + kth * kth + kph * kph;
+    let om2 = om * om;
+
+    let ex = compute_ed(r, theta, phi, freq_mhz, p);
+    let x = ex.x;
+    let col = compute_col(r, theta, phi, freq_mhz, p);
+    let z = col.z;
+
+    let u = Cx::new(1.0, -z);
+    let n2 = Cx::from_real(1.0) - Cx::from_real(x) / u;
+
+    let pnpx = Cx::from_real(-1.0) / (u * 2.0);
+    let pnpz = Cx::new(0.0, -1.0) * Cx::from_real(x) / (u * u * 2.0);
+    let nnp = n2 - (pnpx * (2.0 * x) + pnpz * Cx::from_real(z));
+
+    let pnpr = pnpx * ex.dxdr + pnpz * Cx::from_real(col.dzdr);
+    let pnpth = pnpx * ex.dxdth + pnpz * Cx::from_real(col.dzdth);
+    let pnpph = pnpx * ex.dxdph + pnpz * Cx::from_real(col.dzdph);
+    let pnpt = pnpx * ex.dxdt;
+
+    let space = n2.re == 1.0 && n2.im.abs() < 1.0e-5;
+    let kay2_re = om2 / c2 * n2.re;
+    let (new_kr, new_kth, new_kph) = if rstart && k2 > 0.0 {
+        let scale = (kay2_re / k2).sqrt();
+        (scale * kr, scale * kth, scale * kph)
+    } else {
+        (kr, kth, kph)
+    };
+
+    let h_val = 0.5 * (c2 * k2 / om2 - n2.re);
+
+    RindexResult {
+        n2_re: n2.re, n2_im: n2.im,
+        h_re: h_val,
+        dhdt_re: -pnpt.re,
+        dhdr_re: -pnpr.re,
+        dhdth_re: -pnpth.re,
+        dhdph_re: -pnpph.re,
+        dhdom_re: -nnp.re / om,
+        dhdkr_re: c2 / om2 * new_kr,
+        dhdkth_re: c2 / om2 * new_kth,
+        dhdkph_re: c2 / om2 * new_kph,
+        kphpk_re: n2.re, kphpk_im: n2.im,
+        space, new_kr, new_kth, new_kph,
+    }
+}
+
+/// AHWFNC — With Field, No Collisions
+/// Same as AHWFWC but with Z=0 (no collision computation)
+fn ahwfnc(
+    r: f64, theta: f64, phi: f64,
+    kr: f64, kth: f64, kph: f64,
+    freq_mhz: f64, ray_mode: f64,
+    p: &ModelParams, rstart: bool,
+) -> RindexResult {
+    // Same as full AHWFWC but skip collision computation (Z=0)
+    let om = PIT2 * freq_mhz * 1.0e6;
+    let c2 = C * C;
+    let k2 = kr * kr + kth * kth + kph * kph;
+    let om2 = om * om;
+
+    let vr = C / om * kr;
+    let vth = C / om * kth;
+    let vph = C / om * kph;
+
+    let ex = compute_ed(r, theta, phi, freq_mhz, p);
+    let x = ex.x;
+    let mag = compute_mag(r, theta, phi, freq_mhz, p);
+    let y_mag = mag.y;
+
+    let v2 = vr * vr + vth * vth + vph * vph;
+    let vdoty = vr * mag.yr + vth * mag.yth + vph * mag.yph;
+    let (ylv, yl2) = if v2 != 0.0 { (vdoty / v2, vdoty * vdoty / v2) } else { (0.0, 0.0) };
+
+    let yt2 = y_mag * y_mag - yl2;
+    let yt4 = yt2 * yt2;
+
+    // U = 1 (no collisions), so UX = 1-X
+    let ux = 1.0 - x;
+    let ux2 = ux * ux;
+    let rad_arg = yt4 + 4.0 * yl2 * ux2;
+    let rad = ray_mode * rad_arg.sqrt();
+    let d = 2.0 * ux - yt2 + rad;
+    let d2 = d * d;
+    let n2_re = 1.0 - 2.0 * x * ux / d;
+
+    let (pnpps, pnpx, pnpy);
+    if rad.abs() > 1e-30 {
+        pnpps = 2.0 * x * ux * (-1.0 + (yt2 - 2.0 * ux2) / rad) / d2;
+        pnpx = -(2.0 * ux2 - yt2 * (1.0 - 2.0 * x)
+            + (yt4 * (1.0 - 2.0 * x) + 4.0 * yl2 * ux * ux2) / rad) / d2;
+        pnpy = if y_mag != 0.0 {
+            2.0 * x * ux * (-yt2 + (yt4 + 2.0 * yl2 * ux2) / rad) / (d2 * y_mag)
+        } else { 0.0 };
+    } else {
+        pnpps = -2.0 * x * ux / d2;
+        pnpx = -2.0 * ux2 / d2;
+        pnpy = 0.0;
+    }
+
+    let nnp = n2_re - (2.0 * x * pnpx + y_mag * pnpy);
+
+    let (ppspr, ppspth, ppspph) = if y_mag != 0.0 {
+        let ppspr = yl2 / y_mag * mag.dydr - (vr * mag.dyrdr + vth * mag.dythdr + vph * mag.dyphdr) * ylv;
+        let ppspth = yl2 / y_mag * mag.dydth - (vr * mag.dyrdth + vth * mag.dythdth + vph * mag.dyphdth) * ylv;
+        let ppspph = yl2 / y_mag * mag.dydph - (vr * mag.dyrdph + vth * mag.dythdph + vph * mag.dyphdph) * ylv;
+        (ppspr, ppspth, ppspph)
+    } else { (0.0, 0.0, 0.0) };
+
+    let pnpr_v = pnpx * ex.dxdr + pnpy * mag.dydr + pnpps * ppspr;
+    let pnpth_v = pnpx * ex.dxdth + pnpy * mag.dydth + pnpps * ppspth;
+    let pnpph_v = pnpx * ex.dxdph + pnpy * mag.dydph + pnpps * ppspph;
+
+    let (pnpvr, pnpvth, pnpvph) = if v2 != 0.0 {
+        (pnpps * (vr * yl2 / v2 - ylv * mag.yr),
+         pnpps * (vth * yl2 / v2 - ylv * mag.yth),
+         pnpps * (vph * yl2 / v2 - ylv * mag.yph))
+    } else { (0.0, 0.0, 0.0) };
+
+    let space = n2_re == 1.0;
+    let kay2_re = om2 / c2 * n2_re;
+    let (new_kr, new_kth, new_kph) = if rstart && k2 > 0.0 {
+        let scale = (kay2_re / k2).sqrt();
+        (scale * kr, scale * kth, scale * kph)
+    } else { (kr, kth, kph) };
+
+    let h_val = 0.5 * (c2 * k2 / om2 - n2_re);
+
+    RindexResult {
+        n2_re, n2_im: 0.0,
+        h_re: h_val,
+        dhdt_re: -(pnpx * ex.dxdt),
+        dhdr_re: -pnpr_v,
+        dhdth_re: -pnpth_v,
+        dhdph_re: -pnpph_v,
+        dhdom_re: -nnp / om,
+        dhdkr_re: c2 / om2 * new_kr - C / om * pnpvr,
+        dhdkth_re: c2 / om2 * new_kth - C / om * pnpvth,
+        dhdkph_re: c2 / om2 * new_kph - C / om * pnpvph,
+        kphpk_re: n2_re, kphpk_im: 0.0,
+        space, new_kr, new_kth, new_kph,
+    }
+}
 
 fn ahwfwc(
     r: f64, theta: f64, phi: f64,
@@ -534,7 +931,7 @@ fn hamltn(
     let sth = theta.sin();
     let rsth = r * sth;
 
-    let ri = ahwfwc(r, theta, phi, kr, kth, kph, freq_mhz, ray_mode, p, rstart);
+    let ri = compute_rindex(r, theta, phi, kr, kth, kph, freq_mhz, ray_mode, p, rstart);
 
     let phpom = ri.dhdom_re;
     let phpkr = ri.dhdkr_re;
@@ -922,7 +1319,10 @@ fn trace_ray(
     int_mode, step_size, max_steps, e1max, e1min, e2max,
     earth_r, fc, hm, sh, alpha, ed_a, ed_b, ed_c, ed_e,
     fh, nu1, h1, a1, nu2, h2, a2,
-    print_every=10, ed_model=0, mag_model=0, col_model=0, ym=100.0
+    print_every=10, ed_model=0, mag_model=0, col_model=0, ym=100.0,
+    rindex_model=0, dip=0.0, fc2=0.0, hm2=0.0, sh2=0.0, chi=3.0,
+    pert_model=0, p1=0.0, p2=0.0, p3=0.0, p4=0.0, p5=0.0,
+    p6=0.0, p7=0.0, p8=0.0, p9=0.0
 ))]
 fn trace_ray_py(
     py: Python<'_>,
@@ -939,14 +1339,22 @@ fn trace_ray_py(
     print_every: usize,
     ed_model: u8, mag_model: u8, col_model: u8,
     ym: f64,
+    rindex_model: u8, dip: f64,
+    fc2: f64, hm2: f64, sh2: f64, chi: f64,
+    pert_model: u8,
+    p1: f64, p2: f64, p3: f64, p4: f64, p5: f64,
+    p6: f64, p7: f64, p8: f64, p9: f64,
 ) -> PyResult<PyObject> {
     let params = ModelParams {
         earth_r,
-        ed_model, mag_model, col_model,
+        ed_model, mag_model, col_model, rindex_model,
         fc, hm, sh, alpha,
         ed_a, ed_b, ed_c, ed_e,
-        ym,
-        fh, nu1, h1, a1, nu2, h2, a2,
+        ym, fc2, hm2, sh2, chi,
+        fh, dip,
+        nu1, h1, a1, nu2, h2, a2,
+        pert_model,
+        p1, p2, p3, p4, p5, p6, p7, p8, p9,
     };
 
     let result = trace_ray(
