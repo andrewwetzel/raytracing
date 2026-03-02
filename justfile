@@ -12,7 +12,96 @@ GCP_REGION := "us-central1"
 BACKEND_SERVICE_NAME := "raytracing-backend"
 
 # ===================================================================
-# Local Development & Testing
+# Python + Rust Ray Tracer
+# ===================================================================
+
+VENV := "packages/pyraytrace/.venv"
+PY   := VENV / "bin/python"
+PIP  := VENV / "bin/pip"
+
+# First-time setup: create venv, install Python package + IRI deps + Rust engine
+setup:
+    @echo "--- Creating Python virtualenv ---"
+    python3 -m venv {{VENV}}
+    @echo "--- Installing pyraytrace + IRI/IGRF deps ---"
+    {{PIP}} install -e "packages/pyraytrace[iri,dev]"
+    @echo "--- Installing FastAPI + Uvicorn ---"
+    {{PIP}} install fastapi uvicorn
+    @echo "--- Building Rust engine (release) ---"
+    cd packages/raytrace_core && \
+        VIRTUAL_ENV={{justfile_directory()}}/{{VENV}} \
+        PATH="{{justfile_directory()}}/{{VENV}}/bin:$$PATH" \
+        maturin develop --release
+    @echo "✅ Setup complete. Try: just test-py"
+
+# Build the Rust engine (release mode)
+build-rust:
+    @echo "--- Building raytrace_core (Rust) ---"
+    cd packages/raytrace_core && \
+        VIRTUAL_ENV={{justfile_directory()}}/{{VENV}} \
+        PATH="{{justfile_directory()}}/{{VENV}}/bin:$$PATH" \
+        maturin develop --release
+
+# Run all Python tests (22 tests)
+test-py:
+    @echo "--- Running Python tests ---"
+    {{PY}} -m pytest packages/pyraytrace/tests/ -v
+
+# Run only core tests (fast, no IRI/IGRF)
+test-py-core:
+    {{PY}} -m pytest packages/pyraytrace/tests/test_pyraytrace.py -v
+
+# Run only IRI/IGRF tests
+test-py-iri:
+    {{PY}} -m pytest packages/pyraytrace/tests/test_iri_igrf.py -v
+
+# Start the web visualization server (http://localhost:8765)
+serve port="8765":
+    @echo "--- Starting ray tracer server at http://localhost:{{port}} ---"
+    PYTHONPATH=packages/pyraytrace {{PY}} -m uvicorn packages.backend.main:app \
+        --host 0.0.0.0 --port {{port}} --reload
+
+# Trace the OT 75-76 sample case (Chapman + Dipole)
+trace-sample:
+    {{PY}} -m pyraytrace run packages/pyraytrace/configs/sample_case.yaml
+
+# Trace with real ionosphere (IRI + IGRF)
+trace-iri:
+    {{PY}} -m pyraytrace run packages/pyraytrace/configs/iri_igrf_sample.yaml
+
+# Benchmark: Rust vs Python on sample case
+bench:
+    @echo "--- Benchmarking Rust engine ---"
+    {{PY}} -c "\
+    import raytrace_core, time; \
+    times = []; \
+    for i in range(100): \
+        t0 = time.perf_counter(); \
+        raytrace_core.trace_ray_py(freq_mhz=10.0, ray_mode=-1.0, elevation_deg=20.0, azimuth_deg=45.0, tx_lat_deg=40.0, int_mode=3, step_size=1.0, max_steps=200, e1max=1e-4, e1min=2e-6, e2max=100.0, earth_r=6370.0, fc=10.0, hm=250.0, sh=100.0, alpha=0.5, ed_a=0.0, ed_b=0.0, ed_c=0.0, ed_e=0.0, fh=0.8, nu1=1050000.0, h1=100.0, a1=0.148, nu2=30.0, h2=140.0, a2=0.0183, print_every=100); \
+        times.append((time.perf_counter() - t0) * 1000); \
+    avg = sum(times) / len(times); \
+    print(f'Rust: {avg:.3f} ms/ray (100 iterations)')"
+    @echo ""
+    @echo "--- Benchmarking Python engine ---"
+    {{PY}} -c "\
+    from pyraytrace.core.tracer import SimulationConfig, run_ray; \
+    from pyraytrace.models.electron_density import Chapx; \
+    from pyraytrace.models.magnetic_field import Dipoly; \
+    from pyraytrace.models.collision import Expz2; \
+    from pyraytrace.models.refractive_index import Ahwfwc; \
+    import time; \
+    rindex = Ahwfwc(Chapx(), Dipoly(), Expz2()); \
+    config = SimulationConfig(freq_mhz=10.0, ray_mode=-1.0, elevation_deg=20.0, azimuth_deg=45.0, tx_lat_deg=40.0); \
+    times = []; \
+    for i in range(10): \
+        t0 = time.perf_counter(); \
+        run_ray(config, rindex); \
+        times.append((time.perf_counter() - t0) * 1000); \
+    avg = sum(times) / len(times); \
+    print(f'Python: {avg:.3f} ms/ray (10 iterations)')"
+
+# ===================================================================
+# Local Development & Testing (Legacy)
 # ===================================================================
 
 # Installs dependencies and runs the backend server locally
