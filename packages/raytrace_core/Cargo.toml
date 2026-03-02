@@ -1,0 +1,11 @@
+[package]
+name = "raytrace_core"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "raytrace_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.23", features = ["extension-module"] }
