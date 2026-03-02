@@ -361,6 +361,7 @@ fn compute_mag(r: f64, theta: f64, phi: f64, freq_mhz: f64, p: &ModelParams) -> 
     match p.mag_model {
         1 => consty(r, theta, phi, freq_mhz, p),
         2 => cubey(r, theta, phi, freq_mhz, p),
+        3 => harmony(r, theta, phi, freq_mhz, p),
         _ => dipoly(r, theta, phi, freq_mhz, p),
     }
 }
@@ -421,6 +422,183 @@ fn cubey(r: f64, _theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> Magn
         dyrdr, dyrdth: 0.0, dyrdph: 0.0,
         dythdr, dythdth: 0.0, dythdph: 0.0,
         dyphdr: 0.0, dyphdth: 0.0, dyphdph: 0.0,
+    }
+}
+
+/// Spherical Harmonic magnetic field (HARMONY) with embedded IGRF-14 (2025.0) coefficients
+/// Port of the Fortran HARMONY subroutine using degree n=1..6 Gauss coefficients
+fn harmony(r: f64, theta: f64, phi: f64, freq_mhz: f64, p: &ModelParams) -> MagneticFieldResult {
+    // IGRF-14 coefficients for epoch 2025.0 (nanoTesla)
+    // GG[m][n], HH[m][n], m=order 0..6, n=degree 0..6
+    const GG: [[f64; 7]; 7] = [
+        [       0.0, -29350.0,  -2556.2,   1360.9,    894.7,   -232.9,     66.0],
+        [       0.0,  -1410.3,   2950.9,  -2404.2,    799.6,    369.0,     65.6],
+        [       0.0,      0.0,   1648.7,   1243.8,     55.8,    187.9,     73.0],
+        [       0.0,      0.0,      0.0,    453.4,   -281.1,   -140.7,   -121.6],
+        [       0.0,      0.0,      0.0,      0.0,     12.0,   -151.2,    -36.1],
+        [       0.0,      0.0,      0.0,      0.0,      0.0,     14.0,     13.6],
+        [       0.0,      0.0,      0.0,      0.0,      0.0,      0.0,    -64.8],
+    ];
+    const HH: [[f64; 7]; 7] = [
+        [       0.0,      0.0,      0.0,      0.0,      0.0,      0.0,      0.0],
+        [       0.0,   4545.5,  -3133.6,    -56.9,    278.6,     47.5,    -19.2],
+        [       0.0,      0.0,   -814.2,    237.6,   -134.0,    208.4,     25.0],
+        [       0.0,      0.0,      0.0,   -549.6,    212.0,   -121.4,     52.8],
+        [       0.0,      0.0,      0.0,      0.0,   -375.4,     32.1,    -64.4],
+        [       0.0,      0.0,      0.0,      0.0,      0.0,     99.1,      9.0],
+        [       0.0,      0.0,      0.0,      0.0,      0.0,      0.0,     68.0],
+    ];
+
+    // e/m ratio for electron (C/kg) → convert nT to MHz
+    const EOM: f64 = 1.7589e7;
+    const NN: usize = 7;
+
+    // Precompute A1, B1 coefficients
+    let mut a1 = [[0.0f64; NN]; NN];
+    let mut b1 = [[0.0f64; NN]; NN];
+    for m in 0..NN {
+        for n in 0..NN {
+            let nm = (n + m) as f64;
+            let nmsub = (n as f64) - (m as f64);
+            let denom = (2 * n) as f64 - 1.0;
+            if denom != 0.0 {
+                b1[m][n] = nm * nmsub / denom;
+                a1[m][n] = b1[m][n] / ((2 * n) as f64 + 1.0);
+            }
+        }
+    }
+
+    let costhe = theta.cos();
+    let sinthe = theta.sin().max(1.0e-10);  // prevent div by zero at poles
+
+    let aor = p.earth_r / r;
+    let paorpr = -aor / r;
+    let mut cnst2 = aor;
+    let mut pcnspr = paorpr;
+
+    // sin(m*phi), cos(m*phi)
+    let mut sinp = [0.0f64; NN];
+    let mut cosp = [0.0f64; NN];
+    for m in 0..NN {
+        sinp[m] = ((m as f64) * phi).sin();
+        cosp[m] = ((m as f64) * phi).cos();
+    }
+
+    // Associated Legendre functions using 1-based indexing (h1[m][n] maps to Fortran H(M,N))
+    let mut h1 = [[0.0f64; 8]; 8];
+    h1[1][1] = 1.0;
+    h1[1][2] = costhe;
+    h1[2][2] = sinthe;
+
+    for m in 1..=5usize {
+        h1[m + 1][m + 2] = costhe * h1[m + 1][m + 1];
+        h1[m + 2][m + 2] = sinthe * h1[m + 1][m + 1];
+        for n in m..=5usize {
+            h1[m][n + 2] = costhe * h1[m][n + 1] - a1[m - 1][n - 1] * h1[m][n];
+        }
+    }
+
+    // Derivatives G and PHPTH (∂H/∂θ)
+    let mut g1 = [[0.0f64; 8]; 8];
+    let mut phpth = [[0.0f64; 8]; 8];
+    let mut pgpth = [[0.0f64; 8]; 8];
+
+    for m in 1..=6usize {
+        g1[m + 1][m + 1] = -(m as f64) * costhe * h1[m + 1][m + 1];
+        phpth[m + 1][m + 1] = -g1[m + 1][m + 1] / sinthe;
+        pgpth[m + 1][m + 1] = (m as f64) * sinthe * h1[m + 1][m + 1]
+            - (m as f64) * costhe * phpth[m + 1][m + 1];
+        for n in m..=6usize {
+            g1[m][n + 1] = -(n as f64) * costhe * h1[m][n + 1] + b1[m - 1][n - 1] * h1[m][n];
+            phpth[m][n + 1] = -g1[m][n + 1] / sinthe;
+            pgpth[m][n + 1] = (n as f64) * sinthe * h1[m][n + 1]
+                - (n as f64) * costhe * phpth[m][n + 1] + b1[m - 1][n - 1] * phpth[m][n];
+        }
+    }
+
+    // Accumulate field components
+    let mut fin1 = 0.0f64; let mut pfin1r = 0.0; let mut pfin1t = 0.0; let mut pfin1p = 0.0;
+    let mut fin2 = 0.0f64; let mut pfin2r = 0.0; let mut pfin2t = 0.0; let mut pfin2p = 0.0;
+    let mut fin3 = 0.0f64; let mut pfin3r = 0.0; let mut pfin3t = 0.0; let mut pfin3p = 0.0;
+
+    for n in 1..NN {
+        let mut cr = 0.0; let mut pcrpth = 0.0; let mut pcrpph = 0.0;
+        let mut cth = 0.0; let mut pcthpt = 0.0; let mut pcthpp = 0.0;
+        let mut cph = 0.0; let mut pcphpt = 0.0; let mut pcphpp = 0.0;
+
+        for m in 0..=n {
+            let t1 = GG[m][n] * cosp[m] + HH[m][n] * sinp[m];
+            let m_f = m as f64;
+            let t2 = m_f * (HH[m][n] * cosp[m] - GG[m][n] * sinp[m]);
+
+            // Use 1-based indexing: Fortran M → m+1, N → n+1 (since n starts at 1 here)
+            let mi = m + 1;
+            let ni = n + 1;
+            if mi < 8 && ni < 8 {
+                cr += h1[mi][ni] * t1;
+                pcrpth += phpth[mi][ni] * t1;
+                pcrpph += h1[mi][ni] * t2;
+                cth += g1[mi][ni] * t1;
+                pcthpt += pgpth[mi][ni] * t1;
+                pcthpp += g1[mi][ni] * t2;
+                cph += h1[mi][ni] * t2;
+                pcphpt += phpth[mi][ni] * t2;
+                pcphpp -= h1[mi][ni] * (m_f * m_f) * t1;
+            }
+        }
+
+        cnst2 *= aor;
+        pcnspr = cnst2 * paorpr + aor * pcnspr;
+        let n_f = n as f64;
+
+        fin1 += n_f * cnst2 * cr;
+        pfin1r += n_f * pcnspr * cr;
+        pfin1t += n_f * cnst2 * pcrpth;
+        pfin1p += n_f * cnst2 * pcrpph;
+
+        fin2 += cnst2 * cth;
+        pfin2r += pcnspr * cth;
+        pfin2t += cnst2 * pcthpt;
+        pfin2p += cnst2 * pcthpp;
+
+        fin3 += cnst2 * cph;
+        pfin3r += pcnspr * cph;
+        pfin3t += cnst2 * pcphpt;
+        pfin3p += cnst2 * pcphpp;
+    }
+
+    let htheta = -fin2 / sinthe;
+    let hphi = fin3 / sinthe;
+
+    // Convert from nT to normalized gyrofrequency Y = fH/f
+    let conv = -EOM / PIT2 * 1.0e-6 / freq_mhz;
+    let yr = conv * (-fin1);
+    let yth = conv * htheta;
+    let yph = conv * hphi;
+
+    let y = (yr * yr + yth * yth + yph * yph).sqrt().max(1.0e-10);
+
+    let pyrpr = conv * (-pfin1r);
+    let pytpr = conv * (-pfin2r / sinthe);
+    let pyppr = conv * (pfin3r / sinthe);
+    let dydr = (yr * pyrpr + yth * pytpr + yph * pyppr) / y;
+
+    let pyrpt = conv * (-pfin1t);
+    let pytpt = conv * (-(pfin2t / sinthe + htheta * costhe / sinthe));
+    let pyppt = conv * (pfin3t / sinthe - hphi * costhe / sinthe);
+    let dydth = (yr * pyrpt + yth * pytpt + yph * pyppt) / y;
+
+    let pyrpp = conv * (-pfin1p);
+    let pytpp = conv * (-pfin2p / sinthe);
+    let pyppp = conv * (pfin3p / sinthe);
+    let dydph = (yr * pyrpp + yth * pytpp + yph * pyppp) / y;
+
+    MagneticFieldResult {
+        y, dydr, dydth, dydph,
+        yr, yth, yph,
+        dyrdr: pyrpr, dyrdth: pyrpt, dyrdph: pyrpp,
+        dythdr: pytpr, dythdth: pytpt, dythdph: pytpp,
+        dyphdr: pyppr, dyphdth: pyppt, dyphdph: pyppp,
     }
 }
 
