@@ -1385,6 +1385,10 @@ struct TracePoint {
     step: usize,
     t: f64,
     height_km: f64,
+    lat_deg: f64,
+    lon_deg: f64,
+    ground_range_km: f64,
+    group_path: f64,
     phase_path: f64,
     absorption: f64,
 }
@@ -1393,6 +1397,7 @@ struct TracePoint {
 struct TraceResult {
     points: Vec<TracePoint>,
     max_height: f64,
+    ground_range_km: f64,
     returned_to_ground: bool,
     n_steps: usize,
 }
@@ -1412,7 +1417,14 @@ fn trace_ray(
     // Initial state
     let r0 = p.earth_r;
     let theta0 = PID2 - tx_lat_deg * PI / 180.0;
-    let phi0 = 0.0;  // Longitude not critical for sample case
+    let phi0 = 0.0;
+    let degs = 180.0 / PI;
+
+    // Helper: ground range in km from initial position
+    let ground_range = |theta: f64, phi: f64| -> f64 {
+        let cos_ang = theta0.cos() * theta.cos() + theta0.sin() * theta.sin() * (phi - phi0).cos();
+        p.earth_r * cos_ang.clamp(-1.0, 1.0).acos()
+    };
 
     let kr0 = elev_rad.sin();
     let kth0 = elev_rad.cos() * (PI - az_rad).cos();
@@ -1441,12 +1453,16 @@ fn trace_ray(
     let mut result = TraceResult {
         points: Vec::with_capacity(max_steps / print_every + 5),
         max_height: 0.0,
+        ground_range_km: 0.0,
         returned_to_ground: false,
         n_steps: 0,
     };
 
     result.points.push(TracePoint {
-        step: 0, t: 0.0, height_km: 0.0, phase_path: 0.0, absorption: 0.0,
+        step: 0, t: 0.0, height_km: 0.0,
+        lat_deg: tx_lat_deg, lon_deg: 0.0,
+        ground_range_km: 0.0, group_path: 0.0,
+        phase_path: 0.0, absorption: 0.0,
     });
 
     let mut went_up = false;
@@ -1468,13 +1484,27 @@ fn trace_ray(
         if ground { result.returned_to_ground = true; }
 
         if step_num % print_every == 0 || ground {
+            let theta = state.y[1];
+            let phi = state.y[2];
+            let lat = (PID2 - theta) * degs;
+            let lon = phi * degs;
+            let gr = ground_range(theta, phi);
+            // Group path = integral of (c/vg) ds ≈ phase_path for simple cases
+            let gp = state.y[6]; // close to group path for non-dispersive
             result.points.push(TracePoint {
                 step: step_num,
                 t: state.t,
                 height_km: h,
+                lat_deg: lat,
+                lon_deg: lon,
+                ground_range_km: gr,
+                group_path: gp,
                 phase_path: state.y[6],
                 absorption: state.y[7],
             });
+            if ground {
+                result.ground_range_km = gr;
+            }
         }
 
         result.n_steps = step_num;
@@ -1543,6 +1573,7 @@ fn trace_ray_py(
 
     let dict = pyo3::types::PyDict::new(py);
     dict.set_item("max_height", result.max_height)?;
+    dict.set_item("ground_range_km", result.ground_range_km)?;
     dict.set_item("returned_to_ground", result.returned_to_ground)?;
     dict.set_item("n_steps", result.n_steps)?;
 
@@ -1552,6 +1583,10 @@ fn trace_ray_py(
         pt_dict.set_item("step", pt.step)?;
         pt_dict.set_item("t", pt.t)?;
         pt_dict.set_item("height_km", pt.height_km)?;
+        pt_dict.set_item("lat_deg", pt.lat_deg)?;
+        pt_dict.set_item("lon_deg", pt.lon_deg)?;
+        pt_dict.set_item("ground_range_km", pt.ground_range_km)?;
+        pt_dict.set_item("group_path", pt.group_path)?;
         pt_dict.set_item("phase_path", pt.phase_path)?;
         pt_dict.set_item("absorption", pt.absorption)?;
         points_list.append(pt_dict)?;
