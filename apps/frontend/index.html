@@ -1,26 +1,133 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Pythagorean Theorem Calculator</title>
-  <link rel="stylesheet" type="text/css" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ionospheric Ray Tracer</title>
+    <meta name="description" content="Interactive 3D ionospheric ray tracing visualization">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>Pythagorean Theorem Calculator</h1>
-  <div class="triangle-container">
-    <div class="triangle"></div>
-    <div class="side-a">
-      <label for="side-a-input">Side A</label>
-      <input type="number" id="side-a-input" placeholder="Enter length">
+    <div id="app">
+        <!-- Header -->
+        <header id="header">
+            <div class="logo">
+                <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                    <circle cx="14" cy="14" r="12" stroke="url(#grad1)" stroke-width="2" fill="none"/>
+                    <path d="M6 20 Q14 4 22 20" stroke="url(#grad2)" stroke-width="1.5" fill="none"/>
+                    <path d="M8 18 Q14 6 20 18" stroke="url(#grad2)" stroke-width="1" fill="none" opacity="0.6"/>
+                    <defs>
+                        <linearGradient id="grad1" x1="0" y1="0" x2="28" y2="28">
+                            <stop offset="0%" stop-color="#6366f1"/>
+                            <stop offset="100%" stop-color="#06b6d4"/>
+                        </linearGradient>
+                        <linearGradient id="grad2" x1="0" y1="0" x2="28" y2="0">
+                            <stop offset="0%" stop-color="#f43f5e"/>
+                            <stop offset="50%" stop-color="#f59e0b"/>
+                            <stop offset="100%" stop-color="#6366f1"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+                <h1>Ionospheric Ray Tracer</h1>
+            </div>
+            <div id="stats" class="stats">
+                <span id="stat-rays">—</span>
+                <span id="stat-time">—</span>
+            </div>
+        </header>
+
+        <!-- Canvas -->
+        <canvas id="canvas"></canvas>
+
+        <!-- Controls Panel -->
+        <aside id="controls">
+            <div class="control-section">
+                <h2>Transmitter</h2>
+                <label>
+                    <span>Frequency (MHz)</span>
+                    <div class="slider-row">
+                        <input type="range" id="freq" min="2" max="30" step="0.5" value="10">
+                        <output id="freq-val">10.0</output>
+                    </div>
+                </label>
+                <label>
+                    <span>Mode</span>
+                    <select id="ray-mode">
+                        <option value="-1">Extraordinary (X)</option>
+                        <option value="1">Ordinary (O)</option>
+                    </select>
+                </label>
+            </div>
+
+            <div class="control-section">
+                <h2>Fan Sweep</h2>
+                <label>
+                    <span>Min Elevation (°)</span>
+                    <div class="slider-row">
+                        <input type="range" id="elev-min" min="1" max="40" step="1" value="5">
+                        <output id="elev-min-val">5</output>
+                    </div>
+                </label>
+                <label>
+                    <span>Max Elevation (°)</span>
+                    <div class="slider-row">
+                        <input type="range" id="elev-max" min="20" max="89" step="1" value="80">
+                        <output id="elev-max-val">80</output>
+                    </div>
+                </label>
+                <label>
+                    <span>Step (°)</span>
+                    <div class="slider-row">
+                        <input type="range" id="elev-step" min="0.5" max="10" step="0.5" value="2">
+                        <output id="elev-step-val">2.0</output>
+                    </div>
+                </label>
+            </div>
+
+            <div class="control-section">
+                <h2>Ionosphere</h2>
+                <label>
+                    <span>Critical Freq foF2 (MHz)</span>
+                    <div class="slider-row">
+                        <input type="range" id="fc" min="2" max="20" step="0.5" value="10">
+                        <output id="fc-val">10.0</output>
+                    </div>
+                </label>
+                <label>
+                    <span>Peak Height hmF2 (km)</span>
+                    <div class="slider-row">
+                        <input type="range" id="hm" min="150" max="400" step="10" value="250">
+                        <output id="hm-val">250</output>
+                    </div>
+                </label>
+                <label>
+                    <span>Scale Height (km)</span>
+                    <div class="slider-row">
+                        <input type="range" id="sh" min="30" max="200" step="5" value="100">
+                        <output id="sh-val">100</output>
+                    </div>
+                </label>
+                <label>
+                    <span>Gyrofrequency fH (MHz)</span>
+                    <div class="slider-row">
+                        <input type="range" id="fh" min="0.1" max="2.0" step="0.1" value="0.8">
+                        <output id="fh-val">0.8</output>
+                    </div>
+                </label>
+            </div>
+
+            <button id="trace-btn" class="trace-button">
+                <span class="btn-icon">▶</span> Trace Rays
+            </button>
+
+            <div id="info-panel" class="info-panel">
+                <p class="info-hint">Hover over rays for details</p>
+            </div>
+        </aside>
     </div>
-    <div class="side-b">
-      <label for="side-b-input">Side B</label>
-      <input type="number" id="side-b-input" placeholder="Enter length">
-    </div>
-    <div class="side-c">
-      <p>Hypotenuse: <span id="hypotenuse-result"></span></p>
-    </div>
-  </div>
-  <button id="calculate-button">Calculate</button>
-  <script src="script.js"></script>
+
+    <script src="script.js"></script>
 </body>
 </html>
