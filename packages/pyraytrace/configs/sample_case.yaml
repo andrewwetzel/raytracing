@@ -1,0 +1,54 @@
+# OT Report 75-76 Sample Case
+# Reproduces the sample case from the original 1975 report.
+
+transmitter:
+  latitude: 40.0 # 40°N
+  longitude: -105.0 # 105°W
+  height: 0.0 # Ground level
+  frequency: 10.0 # MHz
+
+ray:
+  mode: extraordinary # -1 (extraordinary ray)
+  elevation: 20.0 # degrees
+  azimuth: 45.0 # degrees clockwise from north
+
+models:
+  electron_density: chapx
+  magnetic_field: dipoly
+  collision: expz2
+
+  electron_density_params:
+    fc: 10.0 # Critical frequency (MHz)
+    hm: 250.0 # Height of max electron density (km)
+    sh: 100.0 # Scale height (km)
+    alpha: 0.5 # Chapman exponent
+    a: 0.0 # Latitude variation
+    b: 0.0 # Period parameter
+    c_coeff: 0.0 # Latitude variation
+    e: 0.0 # Tilt parameter
+
+  magnetic_field_params:
+    fh: 0.8 # Equatorial gyrofrequency (MHz)
+
+  collision_params:
+    nu1: 1050000.0 # Collision freq at h1 (/sec)
+    h1: 100.0 # Reference height (km)
+    a1: 0.148 # Exponential decay (/km)
+    nu2: 30.0 # Second term collision freq
+    h2: 140.0 # Second reference height
+    a2: 0.0183 # Second decay rate
+
+integration:
+  mode: 2 # Adams-Moulton predictor-corrector
+  step_size: 10.0
+  max_steps: 200
+  e1max: 1.0e-4
+  e1min: 2.0e-6
+  e2max: 100.0
+  e2min: 1.0e-8
+  fact: 0.5
+
+output:
+  print_every: 10
+  phase_path: true
+  absorption: true

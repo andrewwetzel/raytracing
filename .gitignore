@@ -68,4 +68,5 @@ test-results/
 
 # OS
 .DS_Store
-Thumbs.db
+Thumbs.dbpackages/pyraytrace/pyraytrace.egg-info/
+packages/pyraytrace/.venv/
