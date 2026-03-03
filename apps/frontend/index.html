@@ -5,12 +5,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ionospheric Ray Tracer</title>
-    <meta name="description" content="Interactive 3D ionospheric ray tracing visualization">
+    <meta name="description" content="Interactive 3D ionospheric ray tracing visualization with multi-ray comparison">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+        }
+    }
+    </script>
 </head>
 
 <body>
@@ -36,138 +44,855 @@
                 </svg>
                 <h1>Ionospheric Ray Tracer</h1>
             </div>
-            <div id="stats" class="stats">
-                <span id="stat-rays">—</span>
-                <span id="stat-time">—</span>
+            <div class="header-actions">
+                <button id="info-btn" class="header-btn" title="Info & Help">
+                    <span>ℹ</span>
+                </button>
+                <div id="stats" class="stats">
+                    <span id="stat-rays">—</span>
+                    <span id="stat-time">—</span>
+                </div>
             </div>
         </header>
 
-        <!-- Canvas -->
+        <!-- Info Modal -->
+        <div id="info-modal" class="info-modal-overlay" style="display:none;">
+            <div class="info-modal">
+                <div class="info-modal-header">
+                    <h2>Ionospheric Ray Tracer</h2>
+                    <button id="info-close" class="info-close-btn">&times;</button>
+                </div>
+                <div class="info-tabs">
+                    <button class="info-tab active" data-tab="settings">📡 Settings Reference</button>
+                    <button class="info-tab" data-tab="howto">📖 How to Use</button>
+                </div>
+
+                <!-- Settings Reference Tab -->
+                <div class="info-tab-content active" id="tab-settings">
+                    <div class="info-section">
+                        <h3>🔀 Run Modes</h3>
+                        <div class="info-card">
+                            <h4>Fan Sweep</h4>
+                            <p>Traces multiple rays across a range of elevation angles simultaneously. This produces a
+                                "fan" of rays departing the transmitter, showing how signals at different departure
+                                angles propagate through the ionosphere. Useful for visualizing overall propagation
+                                geometry and skip zones.</p>
+                        </div>
+                        <div class="info-card">
+                            <h4>Target Location</h4>
+                            <p>Finds the specific elevation angle (or other parameter) needed to reach a target ground
+                                range. Uses bisection search to converge on the right launch conditions. <strong>Quick
+                                    mode</strong> bisects a single variable; <strong>Advanced mode</strong> sweeps
+                                multiple parameter combinations and finds the best match for each.</p>
+                        </div>
+                    </div>
+
+                    <div class="info-section">
+                        <h3>📻 Transmitter Settings</h3>
+                        <div class="info-card">
+                            <h4>Frequency (MHz)</h4>
+                            <p>The radio wave operating frequency. Higher frequencies penetrate deeper into the
+                                ionosphere before refracting. Frequencies above the <em>Maximum Usable Frequency</em>
+                                (MUF) will punch through the ionosphere entirely and escape into space. Typical HF
+                                range: <strong>2–30 MHz</strong>.</p>
+                        </div>
+                        <div class="info-card">
+                            <h4>Ray Mode (O / X)</h4>
+                            <p>The Earth's magnetic field splits radio waves into two characteristic modes:</p>
+                            <ul>
+                                <li><strong>Ordinary (O-mode)</strong> — electric field oscillates parallel to the
+                                    geomagnetic field plane. Refracts at the plasma frequency.</li>
+                                <li><strong>Extraordinary (X-mode)</strong> — electric field oscillates perpendicular to
+                                    B. Refracts at a different (usually higher) frequency due to magneto-ionic coupling.
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="info-section">
+                        <h3>📐 Fan Sweep Parameters</h3>
+                        <div class="info-card">
+                            <h4>Elevation Angles (Min / Max / Step)</h4>
+                            <p>Controls the departure angles of the ray fan, measured from the horizon upward. Low
+                                angles (5–15°) produce long-range "skip" propagation. High angles (60–89°) go nearly
+                                vertical. The step size determines how many rays are traced in the fan.</p>
+                        </div>
+                    </div>
+
+                    <div class="info-section">
+                        <h3>🌐 Ionosphere Parameters</h3>
+                        <div class="info-card">
+                            <h4>Critical Frequency foF2 (MHz)</h4>
+                            <p>The peak plasma frequency of the F2 layer — the <em>densest</em> part of the ionosphere.
+                                A vertically-incident wave at this frequency will just reflect. Oblique rays can reflect
+                                at higher frequencies (up to ~3× foF2). Typical daytime values: <strong>5–12
+                                    MHz</strong>; nighttime: <strong>2–6 MHz</strong>.</p>
+                        </div>
+                        <div class="info-card">
+                            <h4>Peak Height hmF2 (km)</h4>
+                            <p>The altitude of maximum electron density in the F2 layer. Higher hmF2 generally means
+                                longer skip distances because rays refract in a wider arc. Typical values:
+                                <strong>200–400 km</strong>. Varies with solar activity, season, and time of day.
+                            </p>
+                        </div>
+                        <div class="info-card">
+                            <h4>Scale Height (km)</h4>
+                            <p>Controls how "thick" the ionospheric layer is — the vertical distance over which electron
+                                density drops by a factor of <em>e</em> (~2.718). Larger scale heights produce a
+                                broader, more gradual density profile. Smaller values create a sharper, thinner
+                                reflecting layer. Typical range: <strong>50–150 km</strong>.</p>
+                        </div>
+                        <div class="info-card">
+                            <h4>Gyrofrequency fH (MHz)</h4>
+                            <p>The electron cyclotron frequency in the Earth's magnetic field — the frequency at which
+                                free electrons spiral around geomagnetic field lines. Determines the strength of
+                                magneto-ionic splitting between O and X modes. Typical surface value: <strong>0.8–1.4
+                                    MHz</strong>; decreases with altitude.</p>
+                        </div>
+                    </div>
+
+                    <div class="info-section">
+                        <h3>🧪 Physics Models</h3>
+                        <div class="info-card">
+                            <h4>Electron Density Models</h4>
+                            <ul>
+                                <li><strong>Chapman</strong> — Classic single-layer Chapman profile. Good
+                                    general-purpose model with analytic gradients.</li>
+                                <li><strong>ELECT1</strong> — Tabulated multi-layer profile from the original Fortran
+                                    code with interpolated gradients.</li>
+                                <li><strong>Linear</strong> — Simple piecewise-linear density increasing to hmF2 then
+                                    decreasing. Useful as a baseline.</li>
+                                <li><strong>Quasi-Parabolic</strong> — Parabolic density profile centered on hmF2.
+                                    Smooth gradients, analytic ray paths.</li>
+                                <li><strong>Var Chapman</strong> — Chapman layer with altitude-varying scale height for
+                                    more realistic profiles.</li>
+                                <li><strong>Dual Chapman</strong> — Two superimposed Chapman layers (E + F2 regions) for
+                                    realistic multi-layer refraction.</li>
+                            </ul>
+                        </div>
+                        <div class="info-card">
+                            <h4>Magnetic Field Models</h4>
+                            <ul>
+                                <li><strong>Dipole</strong> — Centered geomagnetic dipole. Simple but captures the
+                                    essential field geometry.</li>
+                                <li><strong>Constant</strong> — Uniform field direction and magnitude everywhere. Useful
+                                    for isolating magneto-ionic effects.</li>
+                                <li><strong>Cubic</strong> — Higher-order polynomial field model with more realistic
+                                    spatial variation.</li>
+                                <li><strong>IGRF-14</strong> — International Geomagnetic Reference Field (degree 13).
+                                    The most accurate real-world model, using spherical harmonic coefficients valid
+                                    1900–2030.</li>
+                            </ul>
+                        </div>
+                        <div class="info-card">
+                            <h4>Refractive Index Models</h4>
+                            <ul>
+                                <li><strong>Full AH</strong> — Complete Appleton-Hartree formula with magnetic field and
+                                    collisions. Most physically accurate.</li>
+                                <li><strong>No Field/Col</strong> — Ignores both magnetic field and collisions. Simple X
+                                    = (fp/f)² refraction only.</li>
+                                <li><strong>No Field</strong> — Includes collisions but ignores the magnetic field. No
+                                    O/X mode splitting.</li>
+                                <li><strong>No Collisions</strong> — Includes magnetic field but ignores
+                                    electron-neutral collisions. No absorption.</li>
+                            </ul>
+                        </div>
+                        <div class="info-card">
+                            <h4>Perturbation Models</h4>
+                            <ul>
+                                <li><strong>None</strong> — Undisturbed ionosphere.</li>
+                                <li><strong>Torus</strong> — Localized toroidal density enhancement, simulating a plasma
+                                    bubble or TID.</li>
+                                <li><strong>Trough</strong> — Mid-latitude electron density depletion (density trough).
+                                </li>
+                                <li><strong>Shock</strong> — Propagating density discontinuity, modeling a shockwave
+                                    disturbance.</li>
+                                <li><strong>Bulge</strong> — Broad density enhancement, simulating the equatorial
+                                    anomaly or storm-enhanced density.</li>
+                                <li><strong>Exp</strong> — Exponential density perturbation profile.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- How to Use Tab -->
+                <div class="info-tab-content" id="tab-howto">
+                    <div class="info-section">
+                        <h3>🚀 Quick Start</h3>
+                        <div class="howto-steps">
+                            <div class="howto-step">
+                                <span class="step-num">1</span>
+                                <div>
+                                    <strong>Choose a mode</strong>
+                                    <p>Select <em>Fan Sweep</em> to visualize many rays at once, or <em>Target
+                                            Location</em> to find how to reach a specific ground range.</p>
+                                </div>
+                            </div>
+                            <div class="howto-step">
+                                <span class="step-num">2</span>
+                                <div>
+                                    <strong>Set the frequency</strong>
+                                    <p>Adjust the transmitter frequency. Start with <strong>10 MHz</strong> for a
+                                        typical HF scenario. Lower frequencies reflect more easily; higher frequencies
+                                        reach farther or escape.</p>
+                                </div>
+                            </div>
+                            <div class="howto-step">
+                                <span class="step-num">3</span>
+                                <div>
+                                    <strong>Configure the ionosphere</strong>
+                                    <p>Adjust <em>foF2</em> (critical frequency), <em>hmF2</em> (layer height), and
+                                        <em>Scale Height</em> to simulate different ionospheric conditions. Defaults
+                                        represent a typical daytime mid-latitude ionosphere.
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="howto-step">
+                                <span class="step-num">4</span>
+                                <div>
+                                    <strong>Trace the rays</strong>
+                                    <p>Click <strong>▶ Trace Rays</strong> (Fan mode) or <strong>🎯 Find Path</strong>
+                                        (Target mode). Rays will be computed instantly in your browser via WebAssembly.
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="howto-step">
+                                <span class="step-num">5</span>
+                                <div>
+                                    <strong>Explore the map</strong>
+                                    <p><strong>Click and drag</strong> to pan. <strong>Scroll wheel</strong> to zoom.
+                                        <strong>Hover</strong> over any ray for detailed info.
+                                        <strong>Double-click</strong> to reset the view.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="info-section">
+                        <h3>🔬 Comparing Configurations</h3>
+                        <div class="howto-steps">
+                            <div class="howto-step">
+                                <span class="step-num">1</span>
+                                <div>
+                                    <strong>Enable multiple options</strong>
+                                    <p>Check multiple boxes in any group (modes, density models, magnetic models, etc.).
+                                        Each combination becomes a separate trace group with its own color.</p>
+                                </div>
+                            </div>
+                            <div class="howto-step">
+                                <span class="step-num">2</span>
+                                <div>
+                                    <strong>Use sweep ranges</strong>
+                                    <p>Click the <strong>🔀</strong> button next to any numeric parameter to enable a
+                                        sweep range. Set min, max, and step to generate multiple traces across that
+                                        parameter space.</p>
+                                </div>
+                            </div>
+                            <div class="howto-step">
+                                <span class="step-num">3</span>
+                                <div>
+                                    <strong>Watch the combo counter</strong>
+                                    <p>The badge on the Trace button shows how many configurations will be run. Keep it
+                                        under 50 for best performance.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="info-section">
+                        <h3>🎯 Target Mode Tips</h3>
+                        <div class="howto-steps">
+                            <div class="howto-step">
+                                <span class="step-num">1</span>
+                                <div>
+                                    <strong>Set a target range</strong>
+                                    <p>Enter the desired ground range in km. The map will auto-zoom to show the
+                                        transmitter and target. A pink marker shows the target location on the globe.
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="howto-step">
+                                <span class="step-num">2</span>
+                                <div>
+                                    <strong>Choose a search variable</strong>
+                                    <p>In Quick mode, pick which parameter to bisect (elevation, frequency, foF2, etc.).
+                                        The search will find the value that lands a ray closest to your target.</p>
+                                </div>
+                            </div>
+                            <div class="howto-step">
+                                <span class="step-num">3</span>
+                                <div>
+                                    <strong>Use Advanced for multi-parameter exploration</strong>
+                                    <p>Advanced mode sweeps multiple ionospheric parameters and bisects elevation for
+                                        each combo, ranking all results by accuracy. Great for finding optimal
+                                        propagation conditions.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="info-section">
+                        <h3>💾 Exporting Results</h3>
+                        <div class="info-card">
+                            <p>After a fan trace, export your rays as <strong>KML</strong> (for Google Earth) or
+                                <strong>GeoJSON</strong> (for GIS tools). Exports include 3D coordinates with altitude
+                                for each ray point.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Canvas (2D view) -->
         <canvas id="canvas"></canvas>
+        <!-- Globe (3D view) -->
+        <div id="globe-container" style="display:none;"></div>
+        <!-- Legend overlay -->
+        <div id="legend" class="legend-overlay"></div>
+        <!-- View controls overlay -->
+        <div class="view-controls">
+            <div class="view-toolbar">
+                <button id="zoom-in" class="view-btn" title="Zoom in">+</button>
+                <span id="zoom-level" class="zoom-indicator">100%</span>
+                <button id="zoom-out" class="view-btn" title="Zoom out">−</button>
+            </div>
+            <div class="view-toolbar pan-toolbar">
+                <button class="view-btn pan-btn" data-dir="up" title="Pan up">↑</button>
+                <div class="pan-row">
+                    <button class="view-btn pan-btn" data-dir="left" title="Pan left">←</button>
+                    <button id="reset-view" class="view-btn reset-btn" title="Reset view">⟲</button>
+                    <button class="view-btn pan-btn" data-dir="right" title="Pan right">→</button>
+                </div>
+                <button class="view-btn pan-btn" data-dir="down" title="Pan down">↓</button>
+            </div>
+            <button id="fullscreen-toggle" class="view-btn fullscreen-btn" title="Toggle fullscreen map">⛶</button>
+            <div class="screenshot-dropdown">
+                <button id="screenshot-btn" class="view-btn screenshot-btn" title="Save screenshot">📸</button>
+                <div class="screenshot-menu" id="screenshot-menu">
+                    <button id="screenshot-current" class="screenshot-option">📷 Current View</button>
+                    <button id="screenshot-full" class="screenshot-option">🌍 Full Globe</button>
+                </div>
+            </div>
+            <button id="ionogram-toggle" class="view-btn" title="Toggle ionogram">📊</button>
+            <button id="zoom-rect-btn" class="view-btn" title="Zoom to rectangle selection">🔍</button>
+            <button id="iono-layers-btn" class="view-btn" title="Toggle ionosphere layers"
+                style="font-size:11px;">🌐</button>
+            <button id="iono-key-btn" class="view-btn" title="Toggle ionosphere key"
+                style="font-size:11px;">🏷️</button>
+            <button id="view-3d-btn" class="view-btn" title="Toggle 3D globe view" style="font-size:11px;">3D</button>
+        </div>
+
+        <!-- Ionosphere key/legend -->
+        <div id="iono-key" class="iono-key" style="display:none;">
+            <div class="iono-key-title">Ionosphere Layers</div>
+            <div class="iono-key-item"
+                title="D Layer (60–90 km): Lowest layer, absorbs HF signals during daytime. Disappears at night.">
+                <span class="iono-swatch" style="background:rgba(245,158,11,0.4)"></span>
+                <span>D — 60–90 km</span><span class="iono-info">ⓘ</span>
+            </div>
+            <div class="iono-key-item"
+                title="E Layer (90–150 km): Reflects signals up to ~5 MHz. Sporadic E can reflect higher frequencies.">
+                <span class="iono-swatch" style="background:rgba(6,182,212,0.4)"></span>
+                <span>E — 90–150 km</span><span class="iono-info">ⓘ</span>
+            </div>
+            <div class="iono-key-item"
+                title="F1 Layer (150–220 km): Daytime sub-layer of the F region. Merges into F2 at night.">
+                <span class="iono-swatch" style="background:rgba(99,102,241,0.3)"></span>
+                <span>F1 — 150–220 km</span><span class="iono-info">ⓘ</span>
+            </div>
+            <div class="iono-key-item"
+                title="F2 Layer (220–400 km): Primary HF reflection layer. Highest electron density — refracts most radio waves.">
+                <span class="iono-swatch" style="background:rgba(99,102,241,0.5)"></span>
+                <span>F2 — 220–400 km</span><span class="iono-info">ⓘ</span>
+            </div>
+            <div class="iono-key-item"
+                title="hmF2: The altitude of peak electron density in the F2 layer. Critical for determining the Maximum Usable Frequency (MUF).">
+                <span class="iono-swatch-line"></span>
+                <span>hmF2 peak</span><span class="iono-info">ⓘ</span>
+            </div>
+        </div>
+
+        <!-- Ionogram panel -->
+        <div id="ionogram-panel" class="ionogram-panel" style="display:none;">
+            <div class="ionogram-header">
+                <span>Ionogram — Virtual Height vs Frequency</span>
+                <button id="ionogram-close" class="info-close-btn">&times;</button>
+            </div>
+            <canvas id="ionogram-canvas"></canvas>
+        </div>
+
+        <!-- Resize handle -->
+        <div id="resize-handle" class="resize-handle" title="Drag to resize"></div>
+
 
         <!-- Controls Panel -->
         <aside id="controls">
-            <div class="control-section">
-                <h2>Transmitter</h2>
+            <!-- Run Mode Selector -->
+            <div class="control-section run-mode-section">
+                <h2>Run Mode</h2>
+                <div class="mode-toggle">
+                    <button id="mode-fan" class="mode-btn active" data-mode="fan">🔀 Fan Sweep</button>
+                    <button id="mode-target" class="mode-btn" data-mode="target">🎯 Target Location</button>
+                </div>
+            </div>
+
+            <!-- Target Mode Controls (hidden by default) -->
+            <div id="target-controls" class="control-section target-section" style="display:none;">
+                <h2>Target</h2>
                 <label>
-                    <span>Frequency (MHz)</span>
+                    <span>Target Ground Range (km)</span>
                     <div class="slider-row">
-                        <input type="range" id="freq" min="2" max="30" step="0.5" value="10">
-                        <output id="freq-val">10.0</output>
+                        <input type="number" id="target-range" min="100" max="4000" step="10" value="1500"
+                            class="target-input">
                     </div>
                 </label>
                 <label>
-                    <span>Mode</span>
-                    <select id="ray-mode">
-                        <option value="-1">Extraordinary (X)</option>
-                        <option value="1">Ordinary (O)</option>
-                    </select>
+                    <span>Error Tolerance (km)</span>
+                    <div class="slider-row">
+                        <input type="number" id="target-tolerance" min="1" max="200" step="1" value="25"
+                            class="target-input">
+                    </div>
                 </label>
+                <div class="target-mode-toggle">
+                    <button id="target-quick" class="target-mode-btn active">⚡ Quick</button>
+                    <button id="target-advanced" class="target-mode-btn">🔬 Advanced</button>
+                </div>
+                <!-- Quick: single variable bisection -->
+                <div id="target-quick-panel">
+                    <label>
+                        <span>Search Variable</span>
+                        <div class="slider-row">
+                            <select id="target-search-var" class="target-input">
+                                <option value="elev" selected>Elevation (°)</option>
+                                <option value="freq">Frequency (MHz)</option>
+                                <option value="fc">foF2 (MHz)</option>
+                                <option value="hm">hmF2 (km)</option>
+                                <option value="sh">Scale Height (km)</option>
+                            </select>
+                        </div>
+                    </label>
+                    <label>
+                        <span id="target-range-label">Search Range</span>
+                        <div class="sweep-inputs">
+                            <div class="sweep-field"><span>Min</span>
+                                <input type="number" id="target-search-min" min="1" max="85" step="0.5" value="1">
+                            </div>
+                            <div class="sweep-field"><span>Max</span>
+                                <input type="number" id="target-search-max" min="5" max="89" step="0.5" value="60">
+                            </div>
+                        </div>
+                    </label>
+                    <label>
+                        <span>Max Iterations</span>
+                        <div class="slider-row">
+                            <input type="number" id="target-max-iter" min="5" max="50" step="1" value="20"
+                                class="target-input">
+                        </div>
+                    </label>
+                </div>
+                <!-- Advanced: sweep multiple params, bisect elevation for each -->
+                <div id="target-advanced-panel" style="display:none;">
+                    <div class="adv-info-note">Bisects <b>elevation</b> for each parameter combo below.</div>
+                    <div class="adv-sweep-param">
+                        <span class="adv-sweep-name">Elevation bisect range (°)</span>
+                        <div class="sweep-inputs">
+                            <div class="sweep-field"><span>Min</span><input type="number" id="adv-elev-min" value="1"
+                                    min="1" max="85" step="0.5"></div>
+                            <div class="sweep-field"><span>Max</span><input type="number" id="adv-elev-max" value="60"
+                                    min="5" max="89" step="0.5"></div>
+                        </div>
+                    </div>
+                    <div class="adv-sweep-param">
+                        <label class="adv-sweep-header"><input type="checkbox" id="adv-sweep-freq"><span
+                                class="adv-sweep-name">Frequency (MHz)</span></label>
+                        <div class="sweep-inputs adv-fixed-row" id="adv-freq-fixed">
+                            <div class="sweep-field"><span>Value</span><input type="number" id="adv-freq-val" value="10"
+                                    min="2" max="30" step="0.5"></div>
+                        </div>
+                        <div class="sweep-inputs adv-hidden" id="adv-freq-range">
+                            <div class="sweep-field"><span>Min</span><input type="number" id="adv-freq-min" value="8"
+                                    min="2" max="30" step="0.5"></div>
+                            <div class="sweep-field"><span>Max</span><input type="number" id="adv-freq-max" value="15"
+                                    min="2" max="30" step="0.5"></div>
+                            <div class="sweep-field"><span>Step</span><input type="number" id="adv-freq-step" value="2"
+                                    min="0.5" max="10" step="0.5"></div>
+                        </div>
+                    </div>
+                    <div class="adv-sweep-param">
+                        <label class="adv-sweep-header"><input type="checkbox" id="adv-sweep-fc"><span
+                                class="adv-sweep-name">foF2 (MHz)</span></label>
+                        <div class="sweep-inputs adv-fixed-row" id="adv-fc-fixed">
+                            <div class="sweep-field"><span>Value</span><input type="number" id="adv-fc-val" value="10"
+                                    min="2" max="20" step="0.5"></div>
+                        </div>
+                        <div class="sweep-inputs adv-hidden" id="adv-fc-range">
+                            <div class="sweep-field"><span>Min</span><input type="number" id="adv-fc-min" value="6"
+                                    min="2" max="20" step="0.5"></div>
+                            <div class="sweep-field"><span>Max</span><input type="number" id="adv-fc-max" value="14"
+                                    min="2" max="20" step="0.5"></div>
+                            <div class="sweep-field"><span>Step</span><input type="number" id="adv-fc-step" value="2"
+                                    min="0.5" max="10" step="0.5"></div>
+                        </div>
+                    </div>
+                    <div class="adv-sweep-param">
+                        <label class="adv-sweep-header"><input type="checkbox" id="adv-sweep-hm"><span
+                                class="adv-sweep-name">hmF2 (km)</span></label>
+                        <div class="sweep-inputs adv-fixed-row" id="adv-hm-fixed">
+                            <div class="sweep-field"><span>Value</span><input type="number" id="adv-hm-val" value="300"
+                                    min="150" max="400" step="10"></div>
+                        </div>
+                        <div class="sweep-inputs adv-hidden" id="adv-hm-range">
+                            <div class="sweep-field"><span>Min</span><input type="number" id="adv-hm-min" value="200"
+                                    min="150" max="400" step="10"></div>
+                            <div class="sweep-field"><span>Max</span><input type="number" id="adv-hm-max" value="350"
+                                    min="150" max="400" step="10"></div>
+                            <div class="sweep-field"><span>Step</span><input type="number" id="adv-hm-step" value="50"
+                                    min="10" max="100" step="10"></div>
+                        </div>
+                    </div>
+                    <div class="adv-sweep-param">
+                        <label class="adv-sweep-header"><input type="checkbox" id="adv-sweep-sh"><span
+                                class="adv-sweep-name">Scale Height (km)</span></label>
+                        <div class="sweep-inputs adv-fixed-row" id="adv-sh-fixed">
+                            <div class="sweep-field"><span>Value</span><input type="number" id="adv-sh-val" value="80"
+                                    min="30" max="200" step="5"></div>
+                        </div>
+                        <div class="sweep-inputs adv-hidden" id="adv-sh-range">
+                            <div class="sweep-field"><span>Min</span><input type="number" id="adv-sh-min" value="60"
+                                    min="30" max="200" step="5"></div>
+                            <div class="sweep-field"><span>Max</span><input type="number" id="adv-sh-max" value="150"
+                                    min="30" max="200" step="5"></div>
+                            <div class="sweep-field"><span>Step</span><input type="number" id="adv-sh-step" value="30"
+                                    min="5" max="50" step="5"></div>
+                        </div>
+                    </div>
+                    <label>
+                        <span>Max Iterations / combo</span>
+                        <div class="slider-row">
+                            <input type="number" id="adv-max-iter" min="5" max="50" step="1" value="15"
+                                class="target-input">
+                        </div>
+                    </label>
+                    <div id="adv-combo-info" class="adv-combo-info">Combos: 1</div>
+                </div>
+                <!-- Shared -->
+                <div id="target-range-summary" class="target-range-summary" style="display:none;">
+                    <div class="target-range-summary-header">Search Range Summary</div>
+                    <div class="target-range-summary-body">
+                        <div class="range-stat"><span>Min Range:</span><span id="fan-range-min">—</span></div>
+                        <div class="range-stat"><span>Max Range:</span><span id="fan-range-max">—</span></div>
+                        <div class="range-stat"><span>Returned:</span><span id="fan-returned-count">—</span></div>
+                        <div class="range-stat"><span>Escaped:</span><span id="fan-escaped-count">—</span></div>
+                    </div>
+                    <div id="fan-range-hint" class="range-hint"></div>
+                </div>
+                <div class="target-btn-row">
+                    <button id="target-btn" class="trace-button target-button">
+                        <span class="btn-icon">🎯</span>
+                        <span class="btn-label">Find Path</span>
+                    </button>
+                    <button id="target-stop-btn" class="trace-button stop-button" style="display:none;">
+                        <span class="btn-icon">⏹</span>
+                        <span class="btn-label">Stop</span>
+                    </button>
+                </div>
+
+                <div id="target-log" class="target-log">
+                    <div class="target-log-header">Search Log</div>
+                    <div id="target-log-body" class="target-log-body"></div>
+                </div>
+                <div id="adv-results" class="adv-results" style="display:none;">
+                    <div class="adv-results-header">Results — Ranked by Accuracy</div>
+                    <div id="adv-results-body" class="adv-results-body"></div>
+                </div>
+
+                <div class="muf-luf-section">
+                    <button id="muf-luf-btn" class="muf-luf-button">
+                        <span class="btn-icon">📡</span>
+                        <span>Calculate MUF/LUF</span>
+                    </button>
+                    <div id="muf-luf-results" class="muf-luf-results" style="display:none;">
+                        <div class="muf-luf-row">
+                            <span class="muf-label">MUF</span>
+                            <span id="muf-value" class="muf-value">—</span>
+                        </div>
+                        <div class="muf-luf-row">
+                            <span class="luf-label">LUF</span>
+                            <span id="luf-value" class="luf-value">—</span>
+                        </div>
+                        <div class="muf-luf-row">
+                            <span class="ouf-label">OWF</span>
+                            <span id="owf-value" class="owf-value">—</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-section location-section">
+                <h2 class="section-toggle" data-section="location">TX Location <span class="chevron">▾</span></h2>
+                <div class="section-body" id="section-location">
+                    <div class="location-row">
+                        <label class="location-field">
+                            <span>Lat (°)</span>
+                            <input type="number" id="tx-lat" min="-90" max="90" step="0.1" value="40.0">
+                        </label>
+                        <label class="location-field">
+                            <span>Lon (°)</span>
+                            <input type="number" id="tx-lon" min="-180" max="180" step="0.1" value="-80.0">
+                        </label>
+                    </div>
+                    <div class="location-actions">
+                        <button id="geolocate-btn" class="geolocate-btn" title="Use browser geolocation">
+                            <span class="geo-icon">📍</span>
+                            <span class="geo-label">My Location</span>
+                        </button>
+                        <span id="geo-status" class="geo-status">Manual</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-section" id="fan-controls-transmitter">
+                <h2 class="section-toggle" data-section="transmitter">Transmitter <span class="chevron">▾</span></h2>
+                <div class="section-body" id="section-transmitter">
+                    <label>
+                        <div class="compact-slider-header">
+                            <span>Freq (MHz)</span>
+                            <button class="sweep-toggle" data-target="freq" title="Toggle range sweep">🔀</button>
+                        </div>
+                        <div class="compact-slider" id="freq-single">
+                            <input type="range" id="freq" min="2" max="30" step="0.5" value="10">
+                            <output id="freq-val">10.0</output>
+                        </div>
+                        <div class="sweep-range hidden" id="freq-sweep">
+                            <div class="sweep-inputs">
+                                <div class="sweep-field"><span>Min</span><input type="number" id="freq-sweep-min"
+                                        min="2" max="30" step="0.5" value="5"></div>
+                                <div class="sweep-field"><span>Max</span><input type="number" id="freq-sweep-max"
+                                        min="2" max="30" step="0.5" value="15"></div>
+                                <div class="sweep-field"><span>Step</span><input type="number" id="freq-sweep-step"
+                                        min="0.5" max="10" step="0.5" value="5"></div>
+                            </div>
+                        </div>
+                    </label>
+                    <label>
+                        <span>Mode</span>
+                        <div class="checkbox-group" id="ray-mode-group">
+                            <label class="chip"><input type="checkbox" name="ray-mode" value="-1"
+                                    checked><span>X-mode</span></label>
+                            <label class="chip"><input type="checkbox" name="ray-mode"
+                                    value="1"><span>O-mode</span></label>
+                        </div>
+                    </label>
+                </div>
             </div>
 
             <div class="control-section">
-                <h2>Fan Sweep</h2>
-                <label>
-                    <span>Min Elevation (°)</span>
-                    <div class="slider-row">
+                <h2 class="section-toggle" data-section="fan-sweep">Fan Sweep <span class="chevron">▾</span></h2>
+                <div class="section-body collapsed" id="section-fan-sweep">
+                    <div class="compact-slider">
+                        <span class="compact-label">Min Elev</span>
                         <input type="range" id="elev-min" min="1" max="40" step="1" value="5">
                         <output id="elev-min-val">5</output>
                     </div>
-                </label>
-                <label>
-                    <span>Max Elevation (°)</span>
-                    <div class="slider-row">
+                    <div class="compact-slider">
+                        <span class="compact-label">Max Elev</span>
                         <input type="range" id="elev-max" min="20" max="89" step="1" value="80">
                         <output id="elev-max-val">80</output>
                     </div>
-                </label>
-                <label>
-                    <span>Step (°)</span>
-                    <div class="slider-row">
+                    <div class="compact-slider">
+                        <span class="compact-label">Step (°)</span>
                         <input type="range" id="elev-step" min="0.5" max="10" step="0.5" value="2">
                         <output id="elev-step-val">2.0</output>
                     </div>
-                </label>
+                    <div class="compact-slider">
+                        <span class="compact-label">Max Hops</span>
+                        <input type="range" id="max-hops" min="1" max="5" step="1" value="1">
+                        <output id="max-hops-val">1</output>
+                    </div>
+                </div>
             </div>
 
             <div class="control-section">
-                <h2>Ionosphere</h2>
-                <label>
-                    <span>Critical Freq foF2 (MHz)</span>
-                    <div class="slider-row">
-                        <input type="range" id="fc" min="2" max="20" step="0.5" value="10">
-                        <output id="fc-val">10.0</output>
+                <h2 class="section-toggle" data-section="ionosphere">Ionosphere <span class="chevron">▸</span></h2>
+                <div class="section-body collapsed" id="section-ionosphere">
+                    <div class="iri-section">
+                        <button id="iri-toggle" class="iri-toggle-btn"><span>🌍 Auto (IRI)</span></button>
+                        <div id="iri-controls" class="iri-controls" style="display:none;">
+                            <div class="iri-row">
+                                <label class="iri-field"><span>Lat</span><input type="number" id="iri-lat" min="-90"
+                                        max="90" step="1" value="40"></label>
+                                <label class="iri-field"><span>Lon</span><input type="number" id="iri-lon" min="-180"
+                                        max="180" step="1" value="-80"></label>
+                            </div>
+                            <div class="iri-row">
+                                <label class="iri-field"><span>Date</span><input type="date" id="iri-date"
+                                        value="2025-06-21"></label>
+                                <label class="iri-field"><span>UTC</span><input type="time" id="iri-time"
+                                        value="14:00"></label>
+                            </div>
+                            <div class="compact-slider">
+                                <span class="compact-label">SSN</span>
+                                <input type="range" id="iri-ssn" min="0" max="250" step="5" value="100">
+                                <output id="iri-ssn-val">100</output>
+                            </div>
+                            <button id="iri-calculate" class="iri-calc-btn">🔬 Calculate</button>
+                        </div>
                     </div>
-                </label>
-                <label>
-                    <span>Peak Height hmF2 (km)</span>
-                    <div class="slider-row">
-                        <input type="range" id="hm" min="150" max="400" step="10" value="250">
-                        <output id="hm-val">250</output>
-                    </div>
-                </label>
-                <label>
-                    <span>Scale Height (km)</span>
-                    <div class="slider-row">
-                        <input type="range" id="sh" min="30" max="200" step="5" value="100">
-                        <output id="sh-val">100</output>
-                    </div>
-                </label>
-                <label>
-                    <span>Gyrofrequency fH (MHz)</span>
-                    <div class="slider-row">
-                        <input type="range" id="fh" min="0.1" max="2.0" step="0.1" value="0.8">
-                        <output id="fh-val">0.8</output>
-                    </div>
-                </label>
+                    <label>
+                        <div class="compact-slider-header">
+                            <span>foF2 (MHz)</span>
+                            <button class="sweep-toggle" data-target="fc" title="Sweep">🔀</button>
+                        </div>
+                        <div class="compact-slider" id="fc-single">
+                            <input type="range" id="fc" min="2" max="20" step="0.5" value="10">
+                            <output id="fc-val">10.0</output>
+                        </div>
+                        <div class="sweep-range hidden" id="fc-sweep">
+                            <div class="sweep-inputs">
+                                <div class="sweep-field"><span>Min</span><input type="number" id="fc-sweep-min" min="2"
+                                        max="20" step="0.5" value="6"></div>
+                                <div class="sweep-field"><span>Max</span><input type="number" id="fc-sweep-max" min="2"
+                                        max="20" step="0.5" value="14"></div>
+                                <div class="sweep-field"><span>Step</span><input type="number" id="fc-sweep-step"
+                                        min="0.5" max="10" step="0.5" value="4"></div>
+                            </div>
+                        </div>
+                    </label>
+                    <label>
+                        <div class="compact-slider-header">
+                            <span>hmF2 (km)</span>
+                            <button class="sweep-toggle" data-target="hm" title="Sweep">🔀</button>
+                        </div>
+                        <div class="compact-slider" id="hm-single">
+                            <input type="range" id="hm" min="150" max="400" step="10" value="250">
+                            <output id="hm-val">250</output>
+                        </div>
+                        <div class="sweep-range hidden" id="hm-sweep">
+                            <div class="sweep-inputs">
+                                <div class="sweep-field"><span>Min</span><input type="number" id="hm-sweep-min"
+                                        min="150" max="400" step="10" value="200"></div>
+                                <div class="sweep-field"><span>Max</span><input type="number" id="hm-sweep-max"
+                                        min="150" max="400" step="10" value="350"></div>
+                                <div class="sweep-field"><span>Step</span><input type="number" id="hm-sweep-step"
+                                        min="10" max="100" step="10" value="50"></div>
+                            </div>
+                        </div>
+                    </label>
+                    <label>
+                        <div class="compact-slider-header">
+                            <span>Scale H (km)</span>
+                            <button class="sweep-toggle" data-target="sh" title="Sweep">🔀</button>
+                        </div>
+                        <div class="compact-slider" id="sh-single">
+                            <input type="range" id="sh" min="30" max="200" step="5" value="100">
+                            <output id="sh-val">100</output>
+                        </div>
+                        <div class="sweep-range hidden" id="sh-sweep">
+                            <div class="sweep-inputs">
+                                <div class="sweep-field"><span>Min</span><input type="number" id="sh-sweep-min" min="30"
+                                        max="200" step="5" value="50"></div>
+                                <div class="sweep-field"><span>Max</span><input type="number" id="sh-sweep-max" min="30"
+                                        max="200" step="5" value="150"></div>
+                                <div class="sweep-field"><span>Step</span><input type="number" id="sh-sweep-step"
+                                        min="5" max="50" step="5" value="50"></div>
+                            </div>
+                        </div>
+                    </label>
+                    <label>
+                        <div class="compact-slider-header">
+                            <span>fH (MHz)</span>
+                            <button class="sweep-toggle" data-target="fh" title="Sweep">🔀</button>
+                        </div>
+                        <div class="compact-slider" id="fh-single">
+                            <input type="range" id="fh" min="0.1" max="2.0" step="0.1" value="0.8">
+                            <output id="fh-val">0.8</output>
+                        </div>
+                        <div class="sweep-range hidden" id="fh-sweep">
+                            <div class="sweep-inputs">
+                                <div class="sweep-field"><span>Min</span><input type="number" id="fh-sweep-min"
+                                        min="0.1" max="2.0" step="0.1" value="0.4"></div>
+                                <div class="sweep-field"><span>Max</span><input type="number" id="fh-sweep-max"
+                                        min="0.1" max="2.0" step="0.1" value="1.4"></div>
+                                <div class="sweep-field"><span>Step</span><input type="number" id="fh-sweep-step"
+                                        min="0.1" max="1.0" step="0.1" value="0.5"></div>
+                            </div>
+                        </div>
+                    </label>
+                </div>
             </div>
 
             <div class="control-section">
-                <h2>Physics Models</h2>
-                <label>
-                    <span>Electron Density</span>
-                    <select id="ed-model">
-                        <option value="0">Chapman (CHAPX)</option>
-                        <option value="1">ELECT1</option>
-                        <option value="2">Linear</option>
-                        <option value="3">Quasi-Parabolic</option>
-                        <option value="4">Variable Chapman</option>
-                        <option value="5">Dual Chapman</option>
-                    </select>
-                </label>
-                <label>
-                    <span>Magnetic Field</span>
-                    <select id="mag-model">
-                        <option value="0">Dipole (DIPOLY)</option>
-                        <option value="1">Constant (CONSTY)</option>
-                        <option value="2">Cubic (CUBEY)</option>
-                        <option value="3">IGRF-14 (HARMONY)</option>
-                    </select>
-                </label>
-                <label>
-                    <span>Refractive Index</span>
-                    <select id="rindex-model">
-                        <option value="0">Full AH (AHWFWC)</option>
-                        <option value="1">No Field/Col (fast)</option>
-                        <option value="2">No Field (AHNFWC)</option>
-                        <option value="3">No Col (AHWFNC)</option>
-                    </select>
-                </label>
-                <label>
-                    <span>Perturbation</span>
-                    <select id="pert-model">
-                        <option value="0">None</option>
-                        <option value="1">Torus</option>
-                        <option value="2">Trough</option>
-                        <option value="3">Shock (TID)</option>
-                        <option value="4">Bulge</option>
-                        <option value="5">Exponential</option>
-                    </select>
-                </label>
+                <h2 class="section-toggle" data-section="physics">Physics Models <span class="chevron">▸</span></h2>
+                <div class="section-body collapsed" id="section-physics">
+                    <label>
+                        <span>Electron Density</span>
+                        <div class="checkbox-group" id="ed-model-group">
+                            <label class="chip"><input type="checkbox" name="ed-model" value="0"
+                                    checked><span>Chapman</span></label>
+                            <label class="chip"><input type="checkbox" name="ed-model"
+                                    value="1"><span>ELECT1</span></label>
+                            <label class="chip"><input type="checkbox" name="ed-model"
+                                    value="2"><span>Linear</span></label>
+                            <label class="chip"><input type="checkbox" name="ed-model"
+                                    value="3"><span>Quasi-Para</span></label>
+                            <label class="chip"><input type="checkbox" name="ed-model" value="4"><span>Var
+                                    Chapman</span></label>
+                            <label class="chip"><input type="checkbox" name="ed-model" value="5"><span>Dual
+                                    Chapman</span></label>
+                        </div>
+                    </label>
+                    <label>
+                        <span>Magnetic Field</span>
+                        <div class="checkbox-group" id="mag-model-group">
+                            <label class="chip"><input type="checkbox" name="mag-model" value="0"
+                                    checked><span>Dipole</span></label>
+                            <label class="chip"><input type="checkbox" name="mag-model"
+                                    value="1"><span>Constant</span></label>
+                            <label class="chip"><input type="checkbox" name="mag-model"
+                                    value="2"><span>Cubic</span></label>
+                            <label class="chip"><input type="checkbox" name="mag-model"
+                                    value="3"><span>IGRF-14</span></label>
+                        </div>
+                    </label>
+                    <label>
+                        <span>Refractive Index</span>
+                        <div class="checkbox-group" id="rindex-model-group">
+                            <label class="chip"><input type="checkbox" name="rindex-model" value="0" checked><span>Full
+                                    AH</span></label>
+                            <label class="chip"><input type="checkbox" name="rindex-model" value="1"><span>No
+                                    Field/Col</span></label>
+                            <label class="chip"><input type="checkbox" name="rindex-model" value="2"><span>No
+                                    Field</span></label>
+                            <label class="chip"><input type="checkbox" name="rindex-model" value="3"><span>No
+                                    Col</span></label>
+                        </div>
+                    </label>
+                    <label>
+                        <span>Perturbation</span>
+                        <div class="checkbox-group" id="pert-model-group">
+                            <label class="chip"><input type="checkbox" name="pert-model" value="0"
+                                    checked><span>None</span></label>
+                            <label class="chip"><input type="checkbox" name="pert-model"
+                                    value="1"><span>Torus</span></label>
+                            <label class="chip"><input type="checkbox" name="pert-model"
+                                    value="2"><span>Trough</span></label>
+                            <label class="chip"><input type="checkbox" name="pert-model"
+                                    value="3"><span>Shock</span></label>
+                            <label class="chip"><input type="checkbox" name="pert-model"
+                                    value="4"><span>Bulge</span></label>
+                            <label class="chip"><input type="checkbox" name="pert-model"
+                                    value="5"><span>Exp</span></label>
+                        </div>
+                    </label>
+                </div>
             </div>
 
             <button id="trace-btn" class="trace-button">
-                <span class="btn-icon">▶</span> Trace Rays
+                <span class="btn-icon">▶</span>
+                <span class="btn-label">Trace Rays</span>
+                <span id="combo-count" class="combo-counter">1</span>
             </button>
 
             <div class="export-buttons">
@@ -185,7 +910,7 @@
         </aside>
     </div>
 
-    <script src="script.js"></script>
+    <script type="module" src="script.js"></script>
 </body>
 
 </html>

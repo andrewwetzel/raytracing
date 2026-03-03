@@ -1,227 +1,21 @@
 # ===================================================================
-# Configuration
+# WASM Build & Serve
 # ===================================================================
 
-# Automatically read the project ID from your firebase setup (.firebaserc)
-# This assumes your GCP Project ID and Firebase Project ID are the same.
-FIREBASE_PROJECT_ID := `grep default .firebaserc | cut -d '"' -f 4`
-GCP_PROJECT_ID := FIREBASE_PROJECT_ID
-
-# --- User-Defined Deployment Settings ---
-GCP_REGION := "us-central1"
-BACKEND_SERVICE_NAME := "raytracing-backend"
-
-# ===================================================================
-# Python + Rust Ray Tracer
-# ===================================================================
-
-VENV := "packages/pyraytrace/.venv"
-PY   := VENV / "bin/python"
-PIP  := VENV / "bin/pip"
-
-# First-time setup: create venv, install Python package + IRI deps + Rust engine
-setup:
-    @echo "--- Creating Python virtualenv ---"
-    python3 -m venv {{VENV}}
-    @echo "--- Installing pyraytrace + IRI/IGRF deps ---"
-    {{PIP}} install -e "packages/pyraytrace[iri,dev]"
-    @echo "--- Installing FastAPI + Uvicorn ---"
-    {{PIP}} install fastapi uvicorn
-    @echo "--- Building Rust engine (release) ---"
+# Build the WASM module for static hosting
+build-wasm:
+    @echo "--- Building raytrace_core (WASM) ---"
     cd packages/raytrace_core && \
-        VIRTUAL_ENV={{justfile_directory()}}/{{VENV}} \
-        PATH="{{justfile_directory()}}/{{VENV}}/bin:$$PATH" \
-        maturin develop --release
-    @echo "✅ Setup complete. Try: just test-py"
+        wasm-pack build --target web --out-dir ../../apps/frontend/pkg
+    @echo "✅ WASM built — output in apps/frontend/pkg/"
 
-# Build the Rust engine (release mode)
-build-rust:
-    @echo "--- Building raytrace_core (Rust) ---"
-    cd packages/raytrace_core && \
-        VIRTUAL_ENV={{justfile_directory()}}/{{VENV}} \
-        PATH="{{justfile_directory()}}/{{VENV}}/bin:$$PATH" \
-        maturin develop --release
-
-# Run all Python tests (22 tests)
-test-py:
-    @echo "--- Running Python tests ---"
-    {{PY}} -m pytest packages/pyraytrace/tests/ -v
-
-# Run only core tests (fast, no IRI/IGRF)
-test-py-core:
-    {{PY}} -m pytest packages/pyraytrace/tests/test_pyraytrace.py -v
-
-# Run only IRI/IGRF tests
-test-py-iri:
-    {{PY}} -m pytest packages/pyraytrace/tests/test_iri_igrf.py -v
-
-# Start the web visualization server (http://localhost:8765)
-serve port="8765":
-    @echo "--- Starting ray tracer server at http://localhost:{{port}} ---"
-    PYTHONPATH=packages/pyraytrace {{PY}} -m uvicorn packages.backend.main:app \
-        --host 0.0.0.0 --port {{port}} --reload
-
-# Trace the OT 75-76 sample case (Chapman + Dipole)
-trace-sample:
-    {{PY}} -m pyraytrace run packages/pyraytrace/configs/sample_case.yaml
-
-# Trace with real ionosphere (IRI + IGRF)
-trace-iri:
-    {{PY}} -m pyraytrace run packages/pyraytrace/configs/iri_igrf_sample.yaml
-
-# Find elevation angle for a target ground range (default 500 km)
-home range="500":
-    {{PY}} -c "from pyraytrace.propagation import find_elevation; \
-    r = find_elevation(target_range_km={{range}}); \
-    print(f'Target: {{range}} km'); \
-    print(f'Result: elev={r.elevation_deg}° range={r.ground_range_km} km max_h={r.max_height_km} km'); \
-    print(f'Converged: {r.converged} (error {r.error_km} km, {r.n_iterations} iters)')"
-
-# Find MUF/LUF for a given elevation (default 20°)
-muf elev="20":
-    {{PY}} -c "from pyraytrace.propagation import analyze_frequencies; \
-    r = analyze_frequencies(elevation_deg={{elev}}); \
-    print(f'Elevation: {{elev}}°'); \
-    print(f'MUF: {r.muf_mhz} MHz'); \
-    print(f'LUF: {r.luf_mhz} MHz'); \
-    print(f'Optimal: {r.optimal_mhz} MHz (85%% MUF)'); \
-    print(f'Tested {len(r.results)} frequencies')"
-
-# Compute coverage map (all azimuths, 5-60° elevation)
-coverage:
-    {{PY}} -c "from pyraytrace.propagation import compute_coverage; \
-    r = compute_coverage(elev_step=5.0, az_step=30.0); \
-    print(f'{r.n_rays} rays in {r.elapsed_ms:.0f} ms'); \
-    returned = sum(1 for p in r.points if p.returned); \
-    print(f'{returned}/{r.n_rays} returned to ground'); \
-    ranges = [p.ground_range_km for p in r.points if p.ground_range_km]; \
-    print(f'Range: {min(ranges):.0f} — {max(ranges):.0f} km') if ranges else None"
-
-# Benchmark: Rust vs Python on sample case
-bench:
-    @echo "--- Benchmarking Rust engine ---"
-    {{PY}} -c "\
-    import raytrace_core, time; \
-    times = []; \
-    for i in range(100): \
-        t0 = time.perf_counter(); \
-        raytrace_core.trace_ray_py(freq_mhz=10.0, ray_mode=-1.0, elevation_deg=20.0, azimuth_deg=45.0, tx_lat_deg=40.0, int_mode=3, step_size=1.0, max_steps=200, e1max=1e-4, e1min=2e-6, e2max=100.0, earth_r=6370.0, fc=10.0, hm=250.0, sh=100.0, alpha=0.5, ed_a=0.0, ed_b=0.0, ed_c=0.0, ed_e=0.0, fh=0.8, nu1=1050000.0, h1=100.0, a1=0.148, nu2=30.0, h2=140.0, a2=0.0183, print_every=100); \
-        times.append((time.perf_counter() - t0) * 1000); \
-    avg = sum(times) / len(times); \
-    print(f'Rust: {avg:.3f} ms/ray (100 iterations)')"
-    @echo ""
-    @echo "--- Benchmarking Python engine ---"
-    {{PY}} -c "\
-    from pyraytrace.core.tracer import SimulationConfig, run_ray; \
-    from pyraytrace.models.electron_density import Chapx; \
-    from pyraytrace.models.magnetic_field import Dipoly; \
-    from pyraytrace.models.collision import Expz2; \
-    from pyraytrace.models.refractive_index import Ahwfwc; \
-    import time; \
-    rindex = Ahwfwc(Chapx(), Dipoly(), Expz2()); \
-    config = SimulationConfig(freq_mhz=10.0, ray_mode=-1.0, elevation_deg=20.0, azimuth_deg=45.0, tx_lat_deg=40.0); \
-    times = []; \
-    for i in range(10): \
-        t0 = time.perf_counter(); \
-        run_ray(config, rindex); \
-        times.append((time.perf_counter() - t0) * 1000); \
-    avg = sum(times) / len(times); \
-    print(f'Python: {avg:.3f} ms/ray (10 iterations)')"
-
-# ===================================================================
-# Local Development & Testing (Legacy)
-# ===================================================================
-
-# Installs dependencies and runs the backend server locally
-run-backend:
-    @echo "--- Syncing dependencies ---"
-    @uv pip sync pyproject.toml
-    @echo "--- Running backend server at http://127.0.0.1:8000 ---"
-    @uv run uvicorn packages.backend.main:app --reload
-
-# Starts the local backend and frontend servers using Docker Compose
-test-local:
-    @echo "\n--- Starting Local Test Environment (in background) ---"
-    @docker compose -f docker-compose.local.yml up -d
-    @echo "\n--- Services Started ---"
-    @echo "Fetching frontend URL..."
-    @{ \
-        PORT=$(docker compose -f docker-compose.local.yml ps | grep frontend | awk '{print $NF}' | cut -d ':' -f 2 | cut -d '-' -f 1); \
-        echo "Frontend is running at: http://localhost:$$PORT"; \
-    }
-    @echo "\n--- Attaching to logs (press Ctrl+C to detach) ---"
-    @docker compose -f docker-compose.local.yml logs -f
-
-# Stops the local backend and frontend servers
-stop-local:
-    @echo "\n--- Stopping Local Test Environment ---"
-    @docker compose -f docker-compose.local.yml down
-
-# ===================================================================
-# GCP & Firebase Deployment
-# ===================================================================
-
-# Run this once to enable required GCP APIs for Cloud Run and Artifact Registry
-enable-gcp-apis:
-    @echo "--- Enabling GCP APIs for project {{GCP_PROJECT_ID}} ---"
-    @gcloud services enable \
-      run.googleapis.com \
-      artifactregistry.googleapis.com \
-      cloudbuild.googleapis.com \
-      --project={{GCP_PROJECT_ID}}
-
-# Set the active project for Firebase CLI commands
-set-firebase-project:
-    @echo "--- Setting active Firebase project to {{FIREBASE_PROJECT_ID}} ---"
-    @firebase use {{FIREBASE_PROJECT_ID}}
-
-# Build and deploy the backend container to Cloud Run
-deploy-backend:
-    @echo "--- Deploying backend '{{BACKEND_SERVICE_NAME}}' to Cloud Run ---"
-    @gcloud run deploy {{BACKEND_SERVICE_NAME}} \
-      --source ./packages/backend \
-      --platform managed \
-      --region {{GCP_REGION}} \
-      --allow-unauthenticated \
-      --project={{GCP_PROJECT_ID}}
-
-#!/usr/bin/env just --justfile
-
-# Deploy the frontend to Firebase Hosting
-# This recipe automatically injects the deployed backend URL into the frontend code
-deploy-frontend: set-firebase-project
-    @echo "--- Deploying frontend to Firebase Hosting ---"
-    
-    @echo "Fetching Cloud Run service URL..."
-    # Get the URL of the deployed backend
-    SERVICE_URL=`gcloud run services describe {{BACKEND_SERVICE_NAME}} --platform managed --region {{GCP_REGION}} --project={{GCP_PROJECT_ID}} --format 'value(status.url)'`; \
-    echo "Injecting backend URL '$$SERVICE_URL' into frontend"; \
-    sed -i.bak "s|http://1227.0.0.1:8000|$$SERVICE_URL|g" apps/frontend/script.js; \
-    
-    @echo "Deploying to Firebase..."
-    @firebase deploy --only hosting
-    
-    @echo "Cleaning up frontend..."
-    # Revert script.js to its local version
-    @mv apps/frontend/script.js.bak apps/frontend/script.js
-    
-    @echo "--- Frontend deployed successfully! ---"
-
-# Deploy both backend and frontend
-deploy: deploy-backend deploy-frontend
-    @echo "--- Full Deployment Complete ---"
+# Serve the frontend as static files (no backend needed)
+serve-static port="9000":
+    npx -y serve apps/frontend -l {{port}}
 
 # ===================================================================
 # Fortran Examples & Tests
 # ===================================================================
-
-# --- Fortran Example ---
-hello-fortran:
-    @echo "--- Compiling Fortran Program ---"
-    @gfortran -o apps/hello_fortran apps/hello_fortran_example/hello_fortran.f90
-    @echo "--- Running Fortran Program ---"
-    @./apps/hello_fortran
-    @rm apps/hello_fortran
 
 # --- Fortran Subroutine Tests ---
 test-elect1:
@@ -466,20 +260,18 @@ test-e2e-sample-case:
 
 # --- Test Aliases ---
 
-# Run all fortran tests
-test: test-elect1 test-expx test-bulge test-gausel test-tablex test-chapx test-vchapx test-dchapt test-linear test-qparab test-torus test-dtorus test-trough test-shock test-wave test-wave2 test-doppler test-consty test-dipoly test-cubey test-harmony test-tablez test-constz test-expz test-expz2 test-ahwfwc test-ahwfnc test-ahnfwc test-ahnfnc test-bqwfwc test-bqwfnc test-fresnel test-fsw test-fgsw test-swwf test-swnf test-hamltn test-rkam test-backup test-polcar test-reach test-trace test-readw test-printr test-e2e-vertical test-e2e-oblique test-e2e-perf test-e2e-sample-case
+# Run Rust tests with code coverage
+test-rust:
+    @echo "--- Running Rust tests with coverage ---"
+    cd packages/raytrace_core && cargo tarpaulin --skip-clean --out stdout
+    @echo "✅ Rust tests complete"
+
+# Run all Fortran tests
+test-fortran: test-elect1 test-expx test-bulge test-gausel test-tablex test-chapx test-vchapx test-dchapt test-linear test-qparab test-torus test-dtorus test-trough test-shock test-wave test-wave2 test-doppler test-consty test-dipoly test-cubey test-harmony test-tablez test-constz test-expz test-expz2 test-ahwfwc test-ahwfnc test-ahnfwc test-ahnfnc test-bqwfwc test-bqwfnc test-fresnel test-fsw test-fgsw test-swwf test-swnf test-hamltn test-rkam test-backup test-polcar test-reach test-trace test-readw test-printr test-e2e-vertical test-e2e-oblique test-e2e-perf test-e2e-sample-case
+
+# Run ALL tests (Rust + Fortran)
+test: test-rust test-fortran
 
 # Run tests using the Fortran Package Manager
 fpm-test:
     @cd packages/ft_raytrace && fpm test
-
-# --- End-to-End Testing ---
-test-e2e:
-    @echo "--- Building and running services ---"
-    @sudo docker compose up -d --build
-    @echo "--- Running end-to-end tests ---"
-    @sleep 5
-    @chmod +x tests/e2e.sh
-    @./tests/e2e.sh
-    @echo "--- Tearing down services ---"
-    @sudo docker compose down

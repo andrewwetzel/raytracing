@@ -1,1 +1,0 @@
-"""Core ray tracing engine."""

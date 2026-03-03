@@ -1,10 +1,8 @@
 # Agent Instructions
 
-Welcome! Here are a few key things to know about this environment:
-
 ## File Locations
 
-* A key PDF resource, `75-76.pdf`, has been downloaded and is available at `/mnt/data/75-76.pdf`.
+* The original OT Report 75-76 PDF is available at `docs/75-76.pdf`.
 
 ## Available Commands
 

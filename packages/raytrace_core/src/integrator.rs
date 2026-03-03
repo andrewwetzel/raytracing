@@ -1,0 +1,208 @@
+use crate::params::ModelParams;
+use crate::hamiltonian::hamltn;
+
+pub const NN: usize = 8;
+
+pub struct IntegratorState {
+    pub y: [f64; NN],
+    pub dydt: [f64; NN],
+    pub yu: [[f64; NN]; 6],
+    pub fv: [[f64; NN]; 6],
+    pub xv: [f64; 6],
+    pub t: f64,
+    pub step: f64,
+    pub mm: usize,
+    pub ll: usize,
+    pub mode: usize,
+    pub alpha: f64,
+    pub epm: f64,
+    pub e1max: f64,
+    pub e1min: f64,
+    pub e2max: f64,
+    pub e2min: f64,
+    pub fact: f64,
+}
+
+impl IntegratorState {
+    pub fn new(y0: &[f64; NN], t0: f64, step: f64, mode: usize,
+           e1max: f64, e1min: f64, e2max: f64, e2min: f64, fact: f64) -> Self {
+        let mut s = Self {
+            y: *y0,
+            dydt: [0.0; NN],
+            yu: [[0.0; NN]; 6],
+            fv: [[0.0; NN]; 6],
+            xv: [0.0; 6],
+            t: t0,
+            step,
+            mm: 1,
+            ll: 1,
+            mode,
+            alpha: t0,
+            epm: 0.0,
+            e1max,
+            e1min: if e1min <= 0.0 { e1max / 55.0 } else { e1min },
+            e2max,
+            e2min,
+            fact: if fact <= 0.0 { 0.5 } else { fact },
+        };
+        if mode == 1 { s.mm = 4; }
+        s.xv[s.mm] = t0;
+        for i in 0..NN {
+            s.yu[s.mm][i] = y0[i];
+        }
+        s
+    }
+}
+
+pub fn rk4_step(
+    s: &mut IntegratorState,
+    freq_mhz: f64, ray_mode: f64, p: &ModelParams,
+) {
+    let bet = [0.5, 0.5, 1.0, 0.0];
+    let mut dely = [[0.0f64; NN]; 4];
+    let mm = s.mm;
+
+    for k in 0..4 {
+        for i in 0..NN {
+            dely[k][i] = s.step * s.fv[mm][i];
+            s.y[i] = s.yu[mm][i] + bet[k] * dely[k][i];
+        }
+        s.t = bet[k] * s.step + s.xv[mm];
+        let (d, _, _, _, _) = hamltn(&s.y, freq_mhz, ray_mode, p, false);
+        s.dydt = d;
+        for i in 0..NN {
+            s.fv[mm][i] = d[i];
+        }
+    }
+
+    for i in 0..NN {
+        let delta = (dely[0][i] + 2.0 * dely[1][i] + 2.0 * dely[2][i] + dely[3][i]) / 6.0;
+        s.yu[mm + 1][i] = s.yu[mm][i] + delta;
+    }
+    s.mm += 1;
+    s.xv[s.mm] = s.xv[s.mm - 1] + s.step;
+    for i in 0..NN { s.y[i] = s.yu[s.mm][i]; }
+    s.t = s.xv[s.mm];
+
+    let (d, _, _, _, _) = hamltn(&s.y, freq_mhz, ray_mode, p, false);
+    s.dydt = d;
+
+    if s.mode == 1 {
+        exit_routine(s);
+        return;
+    }
+
+    for i in 0..NN { s.fv[s.mm][i] = d[i]; }
+
+    if s.mm <= 3 {
+        rk4_step(s, freq_mhz, ray_mode, p);
+        return;
+    }
+
+    am_step(s, freq_mhz, ray_mode, p);
+}
+
+pub fn am_step(
+    s: &mut IntegratorState,
+    freq_mhz: f64, ray_mode: f64, p: &ModelParams,
+) {
+    let mut dely1 = [0.0f64; NN];
+
+    // Predictor (Adams-Bashforth)
+    for i in 0..NN {
+        let delta = s.step * (55.0 * s.fv[4][i] - 59.0 * s.fv[3][i]
+            + 37.0 * s.fv[2][i] - 9.0 * s.fv[1][i]) / 24.0;
+        s.y[i] = s.yu[4][i] + delta;
+        dely1[i] = s.y[i];
+    }
+
+    s.t = s.xv[4] + s.step;
+    let (d, _, _, _, _) = hamltn(&s.y, freq_mhz, ray_mode, p, false);
+    s.dydt = d;
+    s.xv[5] = s.t;
+
+    // Corrector (Adams-Moulton)
+    for i in 0..NN {
+        let delta = s.step * (9.0 * d[i] + 19.0 * s.fv[4][i]
+            - 5.0 * s.fv[3][i] + s.fv[2][i]) / 24.0;
+        s.yu[5][i] = s.yu[4][i] + delta;
+        s.y[i] = s.yu[5][i];
+    }
+
+    let (d2, _, _, _, _) = hamltn(&s.y, freq_mhz, ray_mode, p, false);
+    s.dydt = d2;
+
+    if s.mode <= 2 {
+        exit_routine(s);
+        return;
+    }
+
+    // Error analysis (mode 3)
+    let mut sse = 0.0f64;
+    for i in 0..NN {
+        let mut epsil = 8.0 * (s.y[i] - dely1[i]).abs();
+        if s.y[i].abs() > 1.0e-8 {
+            epsil /= s.y[i].abs();
+        }
+        if sse < epsil { sse = epsil; }
+    }
+
+    if s.e1max <= sse {
+        if s.step.abs() <= s.e2min {
+            exit_routine(s);
+            return;
+        }
+        s.ll = 1;
+        s.mm = 1;
+        s.step *= s.fact;
+        // Reinit from current y
+        for i in 0..NN {
+            s.yu[1][i] = s.y[i];
+            s.fv[1][i] = s.dydt[i];
+        }
+        s.xv[1] = s.t;
+        rk4_step(s, freq_mhz, ray_mode, p);
+        return;
+    }
+
+    if s.ll <= 1 || sse >= s.e1min || s.e2max <= s.step.abs() {
+        exit_routine(s);
+        return;
+    }
+
+    // Double step
+    s.ll = 2;
+    s.mm = 3;
+    s.xv[2] = s.xv[3];
+    s.xv[3] = s.xv[5];
+    for i in 0..NN {
+        s.fv[2][i] = s.fv[3][i];
+        s.fv[3][i] = s.dydt[i];
+        s.yu[2][i] = s.yu[3][i];
+        s.yu[3][i] = s.yu[5][i];
+    }
+    s.step *= 2.0;
+    rk4_step(s, freq_mhz, ray_mode, p);
+}
+
+fn exit_routine(s: &mut IntegratorState) {
+    s.ll = 2;
+    s.mm = 4;
+
+    for k in 1..4 {
+        s.xv[k] = s.xv[k + 1];
+        for i in 0..NN {
+            s.fv[k][i] = s.fv[k + 1][i];
+            s.yu[k][i] = s.yu[k + 1][i];
+        }
+    }
+    s.xv[4] = s.xv[5];
+    for i in 0..NN {
+        s.fv[4][i] = s.dydt[i];
+        s.yu[4][i] = s.yu[5][i];
+    }
+
+    if s.mode <= 2 { return; }
+    let e = (s.xv[4] - s.alpha).abs();
+    s.epm = s.epm.max(e);
+}

@@ -1,0 +1,15 @@
+{
+  "name": "raytrace_core",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "raytrace_core_bg.wasm",
+    "raytrace_core.js",
+    "raytrace_core.d.ts"
+  ],
+  "main": "raytrace_core.js",
+  "types": "raytrace_core.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
