@@ -248,6 +248,9 @@ function updateTxRxComputed() {
 
   if (rxLat === null || rxLon === null || isNaN(rxLat) || isNaN(rxLon)) {
     if (computed) computed.style.display = 'none';
+    targetMarkerRange = null;
+    if (viewMode === '3d') updateGlobeRays(traceGroups, getTxLat(), getTxLon(), null, null);
+    render();
     return;
   }
 
@@ -278,6 +281,11 @@ function updateTxRxComputed() {
 
   // Update target marker
   targetMarkerRange = Math.round(distance_km);
+
+  if (viewMode === '3d') {
+    updateGlobeRays(traceGroups, txLat, txLon, rxLat, rxLon);
+  }
+  render();
 }
 
 /** Get azimuth from the slider */
@@ -1057,6 +1065,9 @@ function traceRays() {
   document.getElementById('export-geojson').disabled = false;
 
   render();
+  if (viewMode === '3d') {
+    updateGlobeRays(traceGroups, getTxLat(), getTxLon(), getRxLat(), getRxLon());
+  }
   updateLegend();
   serializeStateToUrl();
 
@@ -1639,6 +1650,7 @@ async function targetBisection() {
     logBody.scrollTop = logBody.scrollHeight;
 
     render();
+    if (viewMode === '3d') updateGlobeRays(traceGroups, getTxLat(), getTxLon(), getRxLat(), getRxLon());
     updateLegend();
 
     // Check convergence
@@ -1897,6 +1909,7 @@ async function targetAdvancedSearch() {
     logBody.scrollTop = logBody.scrollHeight;
 
     render();
+    if (viewMode === '3d') updateGlobeRays(traceGroups, getTxLat(), getTxLon(), getRxLat(), getRxLon());
     updateLegend();
     await new Promise(r => setTimeout(r, 10));
   }
@@ -2214,14 +2227,19 @@ function wireControls() {
       viewMode = '3d';
       if (!globeInitialized) {
         initGlobe(globeEl);
-        // Wire click-to-pick: clicking on globe updates TX location
-        onGlobeClick((lat, lon) => {
-          setTxLocation(lat, lon, `${lat.toFixed(1)}°, ${lon.toFixed(1)}°`, 'located');
+        // Wire click-to-pick: clicking on globe updates TX location, Shift+Click updates RX
+        onGlobeClick((lat, lon, event) => {
+          if (event && event.shiftKey) {
+            setRxLocation(lat, lon);
+          } else {
+            setTxLocation(lat, lon, `${lat.toFixed(1)}°, ${lon.toFixed(1)}°`, 'located');
+          }
         });
         globeInitialized = true;
       }
       canvasEl.style.display = 'none';
       setGlobeVisible(true);
+      document.getElementById('globe-hint').style.display = 'block';
 
       // Push current ray data to 3D
       const txLat = getTxLat();
@@ -2237,6 +2255,7 @@ function wireControls() {
       viewMode = '2d';
       canvasEl.style.display = 'block';
       setGlobeVisible(false);
+      document.getElementById('globe-hint').style.display = 'none';
       btn.textContent = '3D';
       btn.style.opacity = '0.4';
       render();

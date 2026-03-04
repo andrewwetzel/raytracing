@@ -349,6 +349,10 @@
         <canvas id="canvas"></canvas>
         <!-- Globe (3D view) -->
         <div id="globe-container" style="display:none;"></div>
+        <div id="globe-hint"
+            style="position:absolute; top:80px; left:50%; transform:translateX(-50%); color:rgba(255,255,255,0.7); font-size:13px; pointer-events:none; display:none; text-shadow:0 1px 4px rgba(0,0,0,0.9); background:rgba(0,0,0,0.4); padding:4px 12px; border-radius:12px; backdrop-filter:blur(4px);">
+            <b>Click:</b> Set TX &nbsp;&middot;&nbsp; <b>Shift+Click:</b> Set Target
+        </div>
         <!-- Legend overlay -->
         <div id="legend" class="legend-overlay"></div>
         <!-- View controls overlay -->
@@ -649,6 +653,39 @@
                             <span class="geo-label">My Location</span>
                         </button>
                         <span id="geo-status" class="geo-status">Manual</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-section location-section">
+                <h2 class="section-toggle" data-section="rx-location">RX / Target Location <span
+                        class="chevron">▾</span></h2>
+                <div class="section-body" id="section-rx-location">
+                    <div class="location-row">
+                        <label class="location-field">
+                            <span>Lat (°)</span>
+                            <input type="number" id="rx-lat" min="-90" max="90" step="0.1" placeholder="Optional">
+                        </label>
+                        <label class="location-field">
+                            <span>Lon (°)</span>
+                            <input type="number" id="rx-lon" min="-180" max="180" step="0.1" placeholder="Optional">
+                        </label>
+                    </div>
+                    <div class="location-actions">
+                        <button id="rx-geolocate-btn" class="geolocate-btn" title="Use browser geolocation for target">
+                            <span class="geo-icon">📍</span>
+                            <span class="geo-label">My Location (Target)</span>
+                        </button>
+                        <button id="rx-clear-btn" class="geolocate-btn" title="Clear RX Target">
+                            <span class="geo-label">Clear</span>
+                        </button>
+                    </div>
+                    <!-- Computed info here -->
+                    <div id="rx-computed" style="display:none; margin-top:10px; font-size: 13px; color: #94a3b8;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>Distance: <b id="rx-distance" style="color: #cbd5e1">—</b></span>
+                            <span>Bearing: <b id="rx-bearing" style="color: #cbd5e1">—</b></span>
+                        </div>
                     </div>
                 </div>
             </div>

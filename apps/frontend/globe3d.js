@@ -474,7 +474,7 @@ function onGlobeClickInternal(event) {
         const { lat, lon } = vec3ToLatLon(point);
 
         if (clickCallback) {
-            clickCallback(lat, lon);
+            clickCallback(lat, lon, event);
         }
     }
 }
