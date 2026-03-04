@@ -269,8 +269,15 @@ test-rust:
 # Run all Fortran tests
 test-fortran: test-elect1 test-expx test-bulge test-gausel test-tablex test-chapx test-vchapx test-dchapt test-linear test-qparab test-torus test-dtorus test-trough test-shock test-wave test-wave2 test-doppler test-consty test-dipoly test-cubey test-harmony test-tablez test-constz test-expz test-expz2 test-ahwfwc test-ahwfnc test-ahnfwc test-ahnfnc test-bqwfwc test-bqwfnc test-fresnel test-fsw test-fgsw test-swwf test-swnf test-hamltn test-rkam test-backup test-polcar test-reach test-trace test-readw test-printr test-e2e-vertical test-e2e-oblique test-e2e-perf test-e2e-sample-case
 
-# Run ALL tests (Rust + Fortran)
-test: test-rust test-fortran
+# Run Frontend E2E tests
+test-frontend:
+    @echo "--- Running Frontend E2E Tests ---"
+    npm install
+    node --test apps/frontend/tests/*.test.js
+    @echo "✅ Frontend E2E tests complete"
+
+# Run ALL tests (Rust + Fortran + Frontend)
+test: test-rust test-fortran test-frontend
 
 # Run tests using the Fortran Package Manager
 fpm-test:
