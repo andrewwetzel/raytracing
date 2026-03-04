@@ -1668,15 +1668,8 @@ async function targetBisection() {
   let currentAz = getAzimuth();
   const maxOuterCycles = 5;
 
-  // Smart trace display: only keep closest overshoot, undershoot, and success
-  let closestOverGroup = null;  // range > target, closest
-  let closestUnderGroup = null; // range < target, closest
-
-  function pruneTraceGroups() {
-    traceGroups = [];
-    if (closestUnderGroup) traceGroups.push(closestUnderGroup);
-    if (closestOverGroup) traceGroups.push(closestOverGroup);
-  }
+  // Keep all rays visible during iteration
+  // (pruning made rays disappear; users want to see all steps)
 
   for (let cycle = 0; cycle < maxOuterCycles; cycle++) {
     if (stopTargeting) break;
@@ -1721,25 +1714,14 @@ async function targetBisection() {
         bestVal = searchMid;
       }
 
-      // Smart trace group: update closest over/under
-      if (isGround) {
-        const group = {
-          label: `${searchMid.toFixed(2)}${varCfg.unit} → ${range} km`,
-          color: range > targetRange ? '#f59e0b' : '#3b82f6', // amber=over, blue=under
-          rays: [ray],
-          config: body,
-        };
-        if (range >= targetRange) {
-          if (!closestOverGroup || Math.abs(range - targetRange) < Math.abs(closestOverGroup.rays[0].range_km - targetRange)) {
-            closestOverGroup = group;
-          }
-        } else {
-          if (!closestUnderGroup || Math.abs(range - targetRange) < Math.abs(closestUnderGroup.rays[0].range_km - targetRange)) {
-            closestUnderGroup = group;
-          }
-        }
-        pruneTraceGroups();
-      }
+      // Add to trace groups for visualization
+      const groupColor = !isGround ? '#334155' : (range > targetRange ? '#f59e0b' : '#3b82f6');
+      traceGroups.push({
+        label: `${searchMid.toFixed(2)}${varCfg.unit} → ${isGround ? range + ' km' : 'escaped'}`,
+        color: groupColor,
+        rays: [ray],
+        config: body,
+      });
 
       // Compute lateral error
       let lateralStr = '—';
@@ -1807,8 +1789,6 @@ async function targetBisection() {
         rays: [bestRay],
         config: varCfg.applyToConfig({ ...baseConfig }, bestVal),
       };
-      // Replace over/under with just the success + boundaries
-      pruneTraceGroups();
       traceGroups.push(successGroup);
       render();
       if (viewMode === '3d') updateGlobeRays(traceGroups, getTxLat(), getTxLon(), getRxLat(), getRxLon());
@@ -1897,7 +1877,6 @@ async function targetBisection() {
               rays: [azRay],
               config: azBody,
             };
-            pruneTraceGroups();
             traceGroups.push(finalGroup);
             render();
             if (viewMode === '3d') updateGlobeRays(traceGroups, getTxLat(), getTxLon(), rxLat, rxLon);
@@ -1934,7 +1913,6 @@ async function targetBisection() {
     const valStr = bestVal.toFixed(2) + varCfg.unit;
     logBody.innerHTML += `<div class="target-log-row fail"><span>—</span><span>Best: ${valStr}</span><span>${bestRay.range_km} km</span><span>${bestError.toFixed(1)} km</span><span>—</span></div>`;
     // Show best ray as final result
-    pruneTraceGroups();
     traceGroups.push({
       label: `Best: ${valStr} → ${bestRay.range_km} km`,
       color: '#f59e0b',
@@ -1957,9 +1935,7 @@ async function targetBisection() {
 
   // Guarantee final trace representation syncs onto UI correctly
   render();
-  if (viewMode === '3d') {
-    updateGlobeRays(traceGroups, getTxLat(), getTxLon(), getRxLat(), getRxLon());
-  }
+  updateGlobeRays(traceGroups, getTxLat(), getTxLon(), getRxLat(), getRxLon());
 }
 
 // ============================================================
