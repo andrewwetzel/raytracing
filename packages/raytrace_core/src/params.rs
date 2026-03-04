@@ -135,7 +135,7 @@ pub enum RayMode {
 
 impl RayMode {
     /// Convert to the internal numeric representation used by the physics engine.
-    pub(crate) fn to_sign(self) -> f64 {
+    pub fn to_sign(self) -> f64 {
         match self {
             RayMode::Extraordinary => -1.0,
             RayMode::Ordinary => 1.0,
@@ -153,15 +153,15 @@ impl RayMode {
 /// collision, refractive index, and perturbation models. Use [`Default::default()`]
 /// to get a standard mid-latitude daytime configuration, then override specific fields:
 ///
-/// ```ignore
-/// use crate::params::ModelParams;
-/// use crate::params::ElectronDensityModel;
+/// ```
+/// use ionotrace::params::ModelParams;
+/// use ionotrace::params::ElectronDensityModel;
 ///
-/// let params = ModelParams {
-///     ed_model: ElectronDensityModel::DualChapman,
-///     fc: 8.0,
-///     ..ModelParams::default()
-/// };
+/// let params = ModelParams::builder()
+///     .ed_model(ElectronDensityModel::DualChapman)
+///     .fc(8.0)
+///     .build()
+///     .unwrap();
 /// ```
 ///
 /// # Stability

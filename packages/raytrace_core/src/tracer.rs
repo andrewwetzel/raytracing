@@ -51,16 +51,14 @@ pub struct TraceResult {
 ///
 /// Use [`TraceConfig::new`] for a minimal setup, then override fields as needed:
 ///
-/// ```ignore
+/// ```
 /// use ionotrace::{TraceConfig, ModelParams};
-/// use crate::params::RayMode;
+/// use ionotrace::params::RayMode;
 ///
-/// let config = TraceConfig {
-///     ray_mode: RayMode::Ordinary,
-///     azimuth_deg: 45.0,
-///     ..TraceConfig::new(10.0, 20.0)
-/// };
-/// let result = config.trace();
+/// let mut config = TraceConfig::new(10.0, 20.0);
+/// config.ray_mode = RayMode::Ordinary;
+/// config.azimuth_deg = 45.0;
+/// let result = config.trace().unwrap();
 /// println!("Max height: {:.2} km", result.max_height);
 /// ```
 ///

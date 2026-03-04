@@ -1,7 +1,7 @@
 //! Export utilities for formatting trace results into standard formats
 //! like CSV and JSON.
 
-use crate::fan::{FanRayPoint, FanTraceResult};
+use crate::fan::FanTraceResult;
 use crate::tracer::TraceResult;
 use serde::Serialize;
 use std::error::Error;
@@ -24,14 +24,21 @@ pub fn export_trace_csv(result: &TraceResult) -> Result<String, Box<dyn Error>> 
 /// the ray index and its launch elevation to distinguish them.
 pub fn export_fan_trace_csv(result: &FanTraceResult) -> Result<String, Box<dyn Error>> {
     #[derive(Serialize)]
-    struct FanExportRow<'a> {
+    struct FanExportRow {
         /// The index of the ray in the fan sweep.
         ray_index: usize,
         /// The initial launch elevation of this ray.
         ray_elev: f64,
-        /// The internal point details.
-        #[serde(flatten)]
-        point: &'a FanRayPoint,
+        /// Height (km)
+        h: f64,
+        /// Time (ms)
+        t: f64,
+        /// Latitude (deg)
+        lat: f64,
+        /// Longitude (deg)
+        lon: f64,
+        /// Ground Range (km)
+        range: f64,
     }
 
     let mut wtr = csv::Writer::from_writer(vec![]);
@@ -40,7 +47,11 @@ pub fn export_fan_trace_csv(result: &FanTraceResult) -> Result<String, Box<dyn E
             let row = FanExportRow {
                 ray_index: i,
                 ray_elev: ray.elev,
-                point: pt,
+                h: pt.h,
+                t: pt.t,
+                lat: pt.lat,
+                lon: pt.lon,
+                range: pt.range,
             };
             wtr.serialize(&row)?;
         }

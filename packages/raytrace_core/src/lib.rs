@@ -6,7 +6,7 @@
 //!
 //! # Quick Start
 //!
-//! ```ignore
+//! ```
 //! use ionotrace::{TraceConfig, ModelParams};
 //!
 //! let config = TraceConfig::new(10.0, 20.0); // 10 MHz, 20° elevation
@@ -21,18 +21,16 @@
 //!
 //! Override physics models via [`ModelParams`]:
 //!
-//! ```ignore
+//! ```
 //! use ionotrace::{TraceConfig, ModelParams};
-//! use crate::params::{ElectronDensityModel, MagneticFieldModel};
+//! use ionotrace::params::{ElectronDensityModel, MagneticFieldModel};
 //!
-//! let config = TraceConfig {
-//!     params: ModelParams {
-//!         ed_model: ElectronDensityModel::DualChapman,
-//!         mag_model: MagneticFieldModel::Igrf14,
-//!         ..ModelParams::default()
-//!     },
-//!     ..TraceConfig::new(15.0, 30.0)
-//! };
+//! let mut config = TraceConfig::new(15.0, 30.0);
+//! config.params = ModelParams::builder()
+//!     .ed_model(ElectronDensityModel::DualChapman)
+//!     .mag_model(MagneticFieldModel::Igrf14)
+//!     .build()
+//!     .unwrap();
 //! ```
 
 #[cfg(target_arch = "wasm32")]
@@ -53,7 +51,7 @@ pub mod tracer;
 // Public re-exports for ergonomic API
 pub use error::TraceError;
 pub use export::{export_fan_trace_csv, export_json, export_trace_csv};
-pub use fan::{FanRay, FanRayPoint, FanTraceConfig, FanTraceResult};
+pub use fan::{fan_trace, FanRay, FanRayPoint, FanTraceConfig, FanTraceResult};
 pub use params::ModelParams;
 pub use tracer::{TraceConfig, TracePoint, TraceResult};
 

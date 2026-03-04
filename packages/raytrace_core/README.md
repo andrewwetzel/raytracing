@@ -23,25 +23,39 @@ Compiles to **WebAssembly** for in-browser use, or runs natively as a Rust libra
 ## Usage (Rust)
 
 ```rust
-use ionotrace::{TraceConfig, ModelParams};
-use ionotrace::params::{ElectronDensityModel, RayMode};
+use ionotrace::{TraceConfig, ModelParams, fan_trace, FanTraceConfig};
+use ionotrace::params::{ElectronDensityModel, RayMode, MagneticFieldModel};
 
-// Simple: 10 MHz, 20° elevation, all defaults
-let result = TraceConfig::new(10.0, 20.0).trace();
+// Simple Single Ray: 10 MHz, 20° elevation, all defaults
+let result = TraceConfig::new(10.0, 20.0).trace().unwrap();
 println!("Max height: {:.2} km", result.max_height);
 
-// Customized: dual-layer Chapman, O-mode, specific frequency
-let config = TraceConfig {
-    ray_mode: RayMode::Ordinary,
+// Customized Sweep: Using the Builder pattern for physics configuration
+let params = ModelParams::builder()
+    .ed_model(ElectronDensityModel::DualChapman)
+    .mag_model(MagneticFieldModel::Dipole)
+    .fc(8.0)
+    .hm(300.0)
+    .build()
+    .unwrap();
+
+let sweep_config = FanTraceConfig {
+    freq_mhz: 15.0,
+    ray_mode: RayMode::Ordinary.to_sign(),
+    elev_min: 5.0,
+    elev_max: 85.0,
+    elev_step: 1.0, 
+    step_size: 5.0,
+    max_steps: 1000,
+    max_hops: 1,
     azimuth_deg: 45.0,
-    params: ModelParams {
-        ed_model: ElectronDensityModel::DualChapman,
-        fc: 8.0,
-        ..ModelParams::default()
-    },
-    ..TraceConfig::new(15.0, 30.0)
+    tx_lat_deg: 40.0,
+    params,
 };
-let result = config.trace();
+
+// Fan traces run automatically in parallel via Rayon on multi-core native systems!
+let sweep_results = fan_trace(&sweep_config).unwrap();
+println!("Computed {} rays in {} ms", sweep_results.n_rays, sweep_results.elapsed_ms);
 ```
 
 ## Usage (WASM)
