@@ -138,7 +138,9 @@ export function updateGlobeRays(traceGroups, txLatDeg, txLonDeg, rxLatDeg, rxLon
     // RX marker if destination is set
     if (rxLatDeg != null && rxLonDeg != null && !isNaN(rxLatDeg) && !isNaN(rxLonDeg)) {
         createRxMarker(rxLatDeg, rxLonDeg);
-        createDirectionArc(txLat, txLon, rxLatDeg, rxLonDeg);
+        if (!traceGroups || traceGroups.length === 0) {
+            createDirectionArc(txLat, txLon, rxLatDeg, rxLonDeg);
+        }
     }
 
     if (!traceGroups || traceGroups.length === 0) return;
