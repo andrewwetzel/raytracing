@@ -250,6 +250,7 @@ function updateTxRxComputed() {
   if (rxLat === null || rxLon === null || isNaN(rxLat) || isNaN(rxLon)) {
     if (computed) computed.style.display = 'none';
     targetMarkerRange = null;
+    exactTargetAzimuth = null;
     if (viewMode === '3d') updateGlobeRays(traceGroups, getTxLat(), getTxLon(), null, null);
     render();
     return;
@@ -269,6 +270,7 @@ function updateTxRxComputed() {
   // Auto-fill azimuth
   const azEl = document.getElementById('azimuth');
   const azVal = document.getElementById('azimuth-val');
+  exactTargetAzimuth = bearing_deg;
   if (azEl) {
     azEl.value = Math.round(bearing_deg);
     if (azVal) azVal.textContent = Math.round(bearing_deg);
@@ -289,8 +291,13 @@ function updateTxRxComputed() {
   render();
 }
 
+let exactTargetAzimuth = null;
+
 /** Get azimuth from the slider */
 function getAzimuth() {
+  if (currentMode === 'target' && exactTargetAzimuth !== null) {
+    return exactTargetAzimuth;
+  }
   return parseFloat(document.getElementById('azimuth')?.value || '0');
 }
 
@@ -1734,6 +1741,12 @@ async function targetBisection() {
   stopBtn.style.display = 'none';
   isTargeting = false;
   stopTargeting = false;
+
+  // Guarantee final trace representation syncs onto UI correctly
+  render();
+  if (viewMode === '3d') {
+    updateGlobeRays(traceGroups, getTxLat(), getTxLon(), getRxLat(), getRxLon());
+  }
 }
 
 // ============================================================
