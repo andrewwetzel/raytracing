@@ -161,36 +161,20 @@ export function updateGlobeRays(traceGroups, txLatDeg, txLonDeg, rxLatDeg, rxLon
                 continue;
             }
             const positions = [];
-            const vecs = [];
             for (const pt of ray.pts) {
                 const pos = latLonAltToVec3(pt.lat, pt.lon + txLon, pt.h);
                 positions.push(pos.x, pos.y, pos.z);
-                vecs.push(pos);
             }
-
-            // Draw a thick glowing tube for the successful Target Bisection ray
-            if (group.color === '#10b981' && vecs.length > 2) {
-                const curve = new THREE.CatmullRomCurve3(vecs);
-                const tubeGeom = new THREE.TubeGeometry(curve, vecs.length, 0.002, 4, false);
-                const tubeMat = new THREE.MeshBasicMaterial({
-                    color: 0x10b981,
-                    transparent: true,
-                    opacity: 0.9,
-                });
-                const tube = new THREE.Mesh(tubeGeom, tubeMat);
-                rayGroup.add(tube);
-            } else {
-                const geometry = new THREE.BufferGeometry();
-                geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-                const material = new THREE.LineBasicMaterial({
-                    color,
-                    transparent: true,
-                    opacity: 0.8,
-                    linewidth: 1,
-                });
-                const line = new THREE.Line(geometry, material);
-                rayGroup.add(line);
-            }
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            const material = new THREE.LineBasicMaterial({
+                color,
+                transparent: true,
+                opacity: group.color === '#10b981' ? 1.0 : 0.8,
+                linewidth: 1,
+            });
+            const line = new THREE.Line(geometry, material);
+            rayGroup.add(line);
             renderedCount++;
         }
     }
@@ -624,7 +608,7 @@ function createDirectionArc(txLat, txLon, rxLat, rxLon) {
     const p2 = points[arrowIdx];
 
     const dir = new THREE.Vector3().subVectors(p2, p1).normalize();
-    const arrowGeom = new THREE.ConeGeometry(0.015, 0.04, 8);
+    const arrowGeom = new THREE.ConeGeometry(0.006, 0.018, 6);
     arrowGeom.rotateX(Math.PI / 2); // Cone points up (+Y), rotate to face vector pathing
 
     const arrowMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b });
