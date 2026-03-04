@@ -1,15 +1,32 @@
 {
-  "name": "raytrace_core",
+  "name": "ionotrace",
   "type": "module",
-  "version": "0.1.0",
-  "files": [
-    "raytrace_core_bg.wasm",
-    "raytrace_core.js",
-    "raytrace_core.d.ts"
+  "collaborators": [
+    "Andrew Wetzel <andrew@wetzel.work>"
   ],
-  "main": "raytrace_core.js",
-  "types": "raytrace_core.d.ts",
+  "description": "High-performance ionospheric ray tracing engine — Hamilton's equations for HF radio propagation through a magnetized, collisional plasma",
+  "version": "0.1.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/andrewwetzel/raytracing"
+  },
+  "files": [
+    "ionotrace_bg.wasm",
+    "ionotrace.js",
+    "ionotrace.d.ts"
+  ],
+  "main": "ionotrace.js",
+  "homepage": "https://github.com/andrewwetzel/raytracing",
+  "types": "ionotrace.d.ts",
   "sideEffects": [
     "./snippets/*"
+  ],
+  "keywords": [
+    "ionosphere",
+    "ray-tracing",
+    "radio-propagation",
+    "hf",
+    "wasm"
   ]
 }

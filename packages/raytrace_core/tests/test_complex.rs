@@ -1,6 +1,6 @@
 //! Tests for the complex number type
 
-use raytrace_core::complex::*;
+use ionotrace::complex::*;
 
 const EPS: f64 = 1e-12;
 

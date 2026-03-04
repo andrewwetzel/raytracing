@@ -1,7 +1,7 @@
 //! Tests for magnetic field models
 
-use raytrace_core::params::*;
-use raytrace_core::models::magnetic_field::*;
+use ionotrace::params::*;
+use ionotrace::models::magnetic_field::*;
 
 const EPS: f64 = 1e-10;
 

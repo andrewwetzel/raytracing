@@ -1,4 +1,4 @@
-//! raytrace_core — High-performance ionospheric ray tracing engine
+//! ionotrace — High-performance ionospheric ray tracing engine
 //!
 //! Rust implementation of the OT 75-76 ray tracing algorithm with WASM bindings.
 //! Ports the performance-critical inner loop: HAMLTN → AHWFWC → RKAM.

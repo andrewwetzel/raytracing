@@ -1,4 +1,4 @@
-/* @ts-self-types="./raytrace_core.d.ts" */
+/* @ts-self-types="./ionotrace.d.ts" */
 
 /**
  * Trace a fan of rays through the ionosphere (called from JavaScript).
@@ -44,7 +44,7 @@ function __wbg_get_imports() {
     };
     return {
         __proto__: null,
-        "./raytrace_core_bg.js": import0,
+        "./ionotrace_bg.js": import0,
     };
 }
 
@@ -204,7 +204,7 @@ async function __wbg_init(module_or_path) {
     }
 
     if (module_or_path === undefined) {
-        module_or_path = new URL('raytrace_core_bg.wasm', import.meta.url);
+        module_or_path = new URL('ionotrace_bg.wasm', import.meta.url);
     }
     const imports = __wbg_get_imports();
 

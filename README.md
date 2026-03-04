@@ -6,7 +6,7 @@
 
 | Engine | Language | Notes |
 |--------|----------|-------|
-| `raytrace_core` | **Rust** (WASM) | Production — runs in-browser via WebAssembly |
+| `ionotrace` | **Rust** (WASM) | Production — runs in-browser via WebAssembly |
 | `ft_raytrace` | Fortran | Reference — original port of all 47 subroutines |
 
 Both produce identical results for the OT 75-76 sample case: **max height 74.08 km**, ray returns to ground.
@@ -15,7 +15,7 @@ Both produce identical results for the OT 75-76 sample case: **max height 74.08 
 
 ```
 packages/
-├── raytrace_core/          # 🚀 Rust engine compiled to WASM
+├── raytrace_core/          # 🚀 Rust engine (ionotrace crate)
 │   ├── src/
 │   │   ├── lib.rs          # Entry point + WASM bindings
 │   │   ├── params.rs       # Model parameters (ModelParams)

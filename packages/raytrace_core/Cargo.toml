@@ -1,5 +1,5 @@
 [package]
-name = "raytrace_core"
+name = "ionotrace"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.70"
@@ -14,7 +14,7 @@ categories = ["science", "simulation"]
 exclude = ["tests/"]
 
 [lib]
-name = "raytrace_core"
+name = "ionotrace"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]

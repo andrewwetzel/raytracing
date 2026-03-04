@@ -1,7 +1,7 @@
 //! Tests for collision frequency models
 
-use raytrace_core::params::*;
-use raytrace_core::models::collision::*;
+use ionotrace::params::*;
+use ionotrace::models::collision::*;
 
 fn default_params() -> ModelParams {
     ModelParams::default()

@@ -1,7 +1,7 @@
 //! Tests for electron density models and perturbations
 
-use raytrace_core::params::*;
-use raytrace_core::models::electron_density::*;
+use ionotrace::params::*;
+use ionotrace::models::electron_density::*;
 
 fn default_params() -> ModelParams {
     ModelParams::default()

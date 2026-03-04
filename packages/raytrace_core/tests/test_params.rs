@@ -1,6 +1,6 @@
 //! Tests for ModelParams defaults and constants
 
-use raytrace_core::params::*;
+use ionotrace::params::*;
 
 #[test]
 fn test_default_params() {

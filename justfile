@@ -4,7 +4,7 @@
 
 # Build the WASM module for static hosting
 build-wasm:
-    @echo "--- Building raytrace_core (WASM) ---"
+    @echo "--- Building ionotrace (WASM) ---"
     cd packages/raytrace_core && \
         wasm-pack build --target web --out-dir ../../apps/frontend/pkg
     @echo "✅ WASM built — output in apps/frontend/pkg/"

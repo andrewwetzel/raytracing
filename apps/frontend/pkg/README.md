@@ -1,70 +1,101 @@
-# raytrace_core
+# ionotrace
 
-High-performance Rust implementation of the OT 75-76 ionospheric ray tracing engine, exposed to Python via PyO3.
+[![Crates.io](https://img.shields.io/crates/v/ionotrace.svg)](https://crates.io/crates/ionotrace)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](../../LICENSE)
 
-**0.028 ms per ray** — 23× faster than Fortran, 96× faster than Python.
+High-performance ionospheric ray tracing engine in Rust. Implements the OT 75-76 algorithm for simulating HF radio wave propagation through the Earth's ionosphere.
+
+Compiles to **WebAssembly** for in-browser use, or runs natively as a Rust library.
+
+## Features
+
+- **Full 3D ray tracing** — Hamilton's equations in spherical coordinates (r, θ, φ)
+- **RK4 / Adams-Moulton** adaptive integrator with automatic step-size control
+- **6 electron density models** — Chapman, ELECT1, Linear, Quasi-Parabolic, Variable Chapman, Dual Chapman
+- **4 magnetic field models** — Dipole, Constant, Cubic, IGRF-14 (degree-13 spherical harmonics)
+- **4 refractive index models** — Full/partial Appleton-Hartree with/without collisions and magnetic field
+- **6 perturbation models** — Torus, Trough, Shock, Bulge, Exponential
+- **3 collision frequency models** — Double-exponential, Constant, Single-exponential
+- **Multi-hop propagation** with ground reflection
+- **Zero-allocation complex arithmetic** for inner-loop performance
+- **WASM bindings** via `wasm-bindgen` (behind `cfg(target_arch = "wasm32")`)
+
+## Usage (Rust)
+
+```rust
+use ionotrace::params::ModelParams;
+use ionotrace::tracer::trace_ray;
+
+let params = ModelParams::default(); // Chapman + Dipole + AHWFWC
+
+let result = trace_ray(
+    10.0,   // freq_mhz
+    -1.0,   // ray_mode (-1 = X-mode, +1 = O-mode)
+    20.0,   // elevation_deg
+    0.0,    // azimuth_deg
+    40.0,   // tx_lat_deg
+    2,      // int_mode (1=RK4, 2=RK4+AM, 3=RK4+AM+error)
+    5.0,    // step_size
+    500,    // max_steps
+    1e-4,   // e1max (error tolerance)
+    2e-6,   // e1min
+    100.0,  // e2max
+    &params,
+    1,      // print_every
+);
+
+println!("Max height: {:.2} km", result.max_height);
+println!("Ground range: {:.1} km", result.ground_range_km);
+println!("Returned: {}", result.returned_to_ground);
+```
+
+## Usage (WASM)
+
+When compiled with `wasm-pack build --target web`, the crate exposes a `trace_fan_wasm(json)` function that accepts and returns JSON strings:
+
+```javascript
+import init, { trace_fan_wasm } from './pkg/ionotrace.js';
+await init();
+
+const result = JSON.parse(trace_fan_wasm(JSON.stringify({
+    freq_mhz: 10.0,
+    ray_mode: -1,
+    elev_min: 5,
+    elev_max: 80,
+    elev_step: 2,
+    fc: 10.0,
+    hm: 250,
+    sh: 100,
+})));
+
+console.log(`Traced ${result.n_rays} rays in ${result.elapsed_ms} ms`);
+```
 
 ## Building
 
-Requires Rust 1.70+ and a Python virtualenv.
-
 ```bash
-# From the pyraytrace venv
-cd packages/raytrace_core
-VIRTUAL_ENV=../pyraytrace/.venv maturin develop --release
+# Native
+cargo build --release
+
+# WASM (requires wasm-pack)
+wasm-pack build --target web --out-dir ../../apps/frontend/pkg
+
+# Tests
+cargo test
 ```
 
-## Usage (from Python)
+## Algorithm
 
-```python
-import raytrace_core
-
-result = raytrace_core.trace_ray_py(
-    # Ray parameters
-    freq_mhz=10.0,          # Wave frequency (MHz)
-    ray_mode=-1.0,           # -1 extraordinary, +1 ordinary
-    elevation_deg=20.0,      # Launch elevation (degrees)
-    azimuth_deg=45.0,        # Launch azimuth (degrees)
-    tx_lat_deg=40.0,         # Transmitter latitude (degrees)
-    # Integration
-    int_mode=2,              # 1=RK, 2=RK+AM, 3=RK+AM+error
-    step_size=10.0,          # Integration step
-    max_steps=200,           # Max integration steps
-    e1max=1e-4, e1min=2e-6, e2max=100.0,
-    # Chapman electron density
-    earth_r=6370.0,
-    fc=10.0, hm=250.0, sh=100.0, alpha=0.5,
-    ed_a=0.0, ed_b=0.0, ed_c=0.0, ed_e=0.0,
-    # Dipole magnetic field
-    fh=0.8,
-    # EXPZ2 collisions
-    nu1=1050000.0, h1=100.0, a1=0.148,
-    nu2=30.0, h2=140.0, a2=0.0183,
-    print_every=10,
-)
-
-print(f"Max height: {result['max_height']:.2f} km")  # 74.08 km
-print(f"Steps: {result['n_steps']}")                  # 43
-print(f"Ground: {result['returned_to_ground']}")      # True
-```
-
-## What's Inside
-
-Single-file Rust implementation (`src/lib.rs`, ~850 lines):
-
-- **CHAPX** — Chapman layer electron density model
-- **DIPOLY** — Dipole magnetic field model
-- **EXPZ2** — Double-exponential collision frequency
-- **AHWFWC** — Appleton-Hartree refractive index (complex)
-- **HAMLTN** — Hamilton's equations for ray tracing
-- **RKAM** — RK4 / Adams-Moulton integrator with adaptive step-size
-- Custom zero-allocation complex number arithmetic
-- PyO3 bindings exposing `trace_ray_py()` to Python
-
-## Benchmark
+Solves Hamilton's equations for the ray path through the ionosphere:
 
 ```
-Rust:    0.028 ms/ray  (10,000 iterations)
-Fortran: 0.640 ms/ray
-Python:  2.650 ms/ray  (100 iterations)
+H = ½(c²k²/ω² - n²)
 ```
+
+where n² is the complex refractive index from the Appleton-Hartree formula. The integrator uses 4th-order Runge-Kutta with Adams-Moulton predictor-corrector and adaptive step-size control.
+
+Based on: *A Versatile Three-Dimensional Ray Tracing Computer Program for Radio Waves in the Ionosphere*, R. M. Jones & J. J. Stephenson, OT Report 75-76 (1975). [PDF](https://www.ionolab.org/pubs/OT_Report_75_76.pdf)
+
+## License
+
+MIT — see [LICENSE](../../LICENSE) for details.

@@ -1,7 +1,7 @@
 //! End-to-end tests for trace_ray (matches OT 75-76 sample case)
 
-use raytrace_core::params::*;
-use raytrace_core::tracer::trace_ray;
+use ionotrace::params::*;
+use ionotrace::tracer::trace_ray;
 
 fn sample_params() -> ModelParams {
     ModelParams::default() // CHAPX + DIPOLY + EXPZ2 + AHWFWC

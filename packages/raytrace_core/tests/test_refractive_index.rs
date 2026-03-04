@@ -1,7 +1,7 @@
 //! Tests for refractive index models (Appleton-Hartree variants)
 
-use raytrace_core::params::*;
-use raytrace_core::models::refractive_index::*;
+use ionotrace::params::*;
+use ionotrace::models::refractive_index::*;
 
 fn default_params() -> ModelParams {
     ModelParams::default()

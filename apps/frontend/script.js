@@ -7,7 +7,7 @@
  * All computation runs client-side via WebAssembly.
  */
 
-import init, { trace_fan_wasm } from './pkg/raytrace_core.js';
+import init, { trace_fan_wasm } from './pkg/ionotrace.js';
 import { initGlobe, updateGlobeRays, setGlobeVisible, onGlobeClick } from './globe3d.js';
 
 // ============================================================
@@ -156,6 +156,7 @@ function requestGeolocation() {
     (pos) => {
       setTxLocation(pos.coords.latitude, pos.coords.longitude, 'Located ✓', 'located');
       if (btn) btn.classList.remove('locating');
+      updateTxRxComputed();
     },
     (err) => {
       console.warn('Geolocation error:', err.message);
@@ -164,6 +165,124 @@ function requestGeolocation() {
     },
     { timeout: 10000, maximumAge: 300000 }
   );
+}
+
+// ============================================================
+// RX Destination helpers
+// ============================================================
+
+function getRxLat() {
+  const v = document.getElementById('rx-lat')?.value;
+  return (v !== '' && v != null) ? parseFloat(v) : null;
+}
+
+function getRxLon() {
+  const v = document.getElementById('rx-lon')?.value;
+  return (v !== '' && v != null) ? parseFloat(v) : null;
+}
+
+function setRxLocation(lat, lon) {
+  const latEl = document.getElementById('rx-lat');
+  const lonEl = document.getElementById('rx-lon');
+  if (latEl) latEl.value = lat.toFixed(1);
+  if (lonEl) lonEl.value = lon.toFixed(1);
+  updateTxRxComputed();
+}
+
+function clearRxLocation() {
+  const latEl = document.getElementById('rx-lat');
+  const lonEl = document.getElementById('rx-lon');
+  if (latEl) latEl.value = '';
+  if (lonEl) lonEl.value = '';
+  const computed = document.getElementById('rx-computed');
+  if (computed) computed.style.display = 'none';
+}
+
+function requestRxGeolocation() {
+  if (!navigator.geolocation) return;
+  const btn = document.getElementById('rx-geolocate-btn');
+  if (btn) btn.classList.add('locating');
+
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      setRxLocation(pos.coords.latitude, pos.coords.longitude);
+      if (btn) btn.classList.remove('locating');
+    },
+    (err) => {
+      console.warn('RX Geolocation error:', err.message);
+      if (btn) btn.classList.remove('locating');
+    },
+    { timeout: 10000, maximumAge: 300000 }
+  );
+}
+
+// ============================================================
+// Great-circle bearing & distance (Haversine)
+// ============================================================
+
+function computeBearingDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Earth radius in km
+  const toRad = Math.PI / 180;
+  const φ1 = lat1 * toRad, φ2 = lat2 * toRad;
+  const Δφ = (lat2 - lat1) * toRad;
+  const Δλ = (lon2 - lon1) * toRad;
+
+  // Haversine distance
+  const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const distance_km = R * c;
+
+  // Forward bearing
+  const y = Math.sin(Δλ) * Math.cos(φ2);
+  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  const bearing_deg = ((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360;
+
+  return { distance_km, bearing_deg };
+}
+
+/** Update computed bearing/distance and auto-fill azimuth + target range */
+function updateTxRxComputed() {
+  const rxLat = getRxLat();
+  const rxLon = getRxLon();
+  const computed = document.getElementById('rx-computed');
+
+  if (rxLat === null || rxLon === null || isNaN(rxLat) || isNaN(rxLon)) {
+    if (computed) computed.style.display = 'none';
+    return;
+  }
+
+  const txLat = getTxLat();
+  const txLon = getTxLon();
+  const { distance_km, bearing_deg } = computeBearingDistance(txLat, txLon, rxLat, rxLon);
+
+  // Display computed values
+  if (computed) computed.style.display = 'block';
+  const distEl = document.getElementById('rx-distance');
+  const bearEl = document.getElementById('rx-bearing');
+  if (distEl) distEl.textContent = `${Math.round(distance_km)} km`;
+  if (bearEl) bearEl.textContent = `${bearing_deg.toFixed(1)}°`;
+
+  // Auto-fill azimuth
+  const azEl = document.getElementById('azimuth');
+  const azVal = document.getElementById('azimuth-val');
+  if (azEl) {
+    azEl.value = Math.round(bearing_deg);
+    if (azVal) azVal.textContent = Math.round(bearing_deg);
+  }
+
+  // Auto-fill target range if in target mode
+  const targetRangeEl = document.getElementById('target-range');
+  if (targetRangeEl) {
+    targetRangeEl.value = Math.round(distance_km);
+  }
+
+  // Update target marker
+  targetMarkerRange = Math.round(distance_km);
+}
+
+/** Get azimuth from the slider */
+function getAzimuth() {
+  return parseFloat(document.getElementById('azimuth')?.value || '0');
 }
 
 // ============================================================
@@ -690,6 +809,7 @@ function render() {
   drawAltitudeScale();
   drawRays();
   drawTargetMarker();
+  drawRxMarker();
   drawTitle();
 
   // Restore camera transform
@@ -759,6 +879,52 @@ function drawTargetMarker() {
   ctx.fillStyle = '#f43f5e';
   ctx.textAlign = 'center';
   ctx.fillText(`🎯 ${targetMarkerRange} km`, pos.x, pos.y + 22);
+  ctx.restore();
+}
+
+function drawRxMarker() {
+  const rxLat = getRxLat();
+  const rxLon = getRxLon();
+  if (rxLat === null || rxLon === null || isNaN(rxLat) || isNaN(rxLon)) return;
+
+  const txLat = getTxLat();
+  const txLon = getTxLon();
+  const { distance_km } = computeBearingDistance(txLat, txLon, rxLat, rxLon);
+
+  const pos = toCanvas(distance_km, 0);
+
+  ctx.save();
+
+  // RX antenna icon
+  ctx.strokeStyle = 'rgba(6, 182, 212, 0.8)';
+  ctx.fillStyle = 'rgba(6, 182, 212, 0.8)';
+  ctx.lineWidth = 1.5;
+
+  // Mast
+  ctx.beginPath();
+  ctx.moveTo(pos.x, pos.y);
+  ctx.lineTo(pos.x, pos.y - 10);
+  ctx.stroke();
+
+  // Dish (V shape at top)
+  ctx.beginPath();
+  ctx.moveTo(pos.x - 5, pos.y - 12);
+  ctx.lineTo(pos.x, pos.y - 8);
+  ctx.lineTo(pos.x + 5, pos.y - 12);
+  ctx.strokeStyle = 'rgba(6, 182, 212, 0.6)';
+  ctx.stroke();
+
+  // Dot at base
+  ctx.beginPath();
+  ctx.arc(pos.x, pos.y, 3, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(6, 182, 212, 0.8)';
+  ctx.fill();
+
+  // Label
+  ctx.font = '10px Inter, sans-serif';
+  ctx.fillStyle = 'rgba(6, 182, 212, 0.9)';
+  ctx.textAlign = 'center';
+  ctx.fillText(`📡 RX ${Math.round(distance_km)} km`, pos.x, pos.y + 18);
   ctx.restore();
 }
 
@@ -839,7 +1005,7 @@ function traceRays() {
       elev_min: elevMin,
       elev_max: elevMax,
       elev_step: elevStep,
-      azimuth_deg: 0.0,
+      azimuth_deg: getAzimuth(),
       tx_lat_deg: getTxLat(),
       fc: cfg.config.fc,
       hm: cfg.config.hm,
@@ -1334,7 +1500,7 @@ async function targetBisection() {
     elev_min: baseElev,
     elev_max: baseElev,
     elev_step: 1.0,
-    azimuth_deg: 0.0,
+    azimuth_deg: getAzimuth(),
     tx_lat_deg: getTxLat(),
     fc: parseFloat(document.getElementById('fc').value),
     hm: parseFloat(document.getElementById('hm').value),
@@ -1639,7 +1805,7 @@ async function targetAdvancedSearch() {
 
   const baseConfig = {
     ray_mode: parseFloat(getCheckedValues('ray-mode-group', true)[0] || -1),
-    azimuth_deg: 0.0,
+    azimuth_deg: getAzimuth(),
     tx_lat_deg: getTxLat(),
     fh: parseFloat(document.getElementById('fh').value),
     step_size: 5.0,
@@ -2002,15 +2168,40 @@ function wireControls() {
     requestGeolocation();
   });
 
-  // Sync TX location inputs → IRI lat/lon
+  // Sync TX location inputs → IRI lat/lon + RX computed
   document.getElementById('tx-lat')?.addEventListener('change', () => {
     const iriLat = document.getElementById('iri-lat');
     if (iriLat) iriLat.value = Math.round(getTxLat());
+    updateTxRxComputed();
   });
   document.getElementById('tx-lon')?.addEventListener('change', () => {
     const iriLon = document.getElementById('iri-lon');
     if (iriLon) iriLon.value = Math.round(getTxLon());
+    updateTxRxComputed();
   });
+
+  // RX Destination controls
+  document.getElementById('rx-geolocate-btn')?.addEventListener('click', () => {
+    requestRxGeolocation();
+  });
+  document.getElementById('rx-clear-btn')?.addEventListener('click', () => {
+    clearRxLocation();
+  });
+  document.getElementById('rx-lat')?.addEventListener('change', () => {
+    updateTxRxComputed();
+  });
+  document.getElementById('rx-lon')?.addEventListener('change', () => {
+    updateTxRxComputed();
+  });
+
+  // Azimuth slider output sync
+  const azSlider = document.getElementById('azimuth');
+  const azOutput = document.getElementById('azimuth-val');
+  if (azSlider && azOutput) {
+    azSlider.addEventListener('input', () => {
+      azOutput.textContent = azSlider.value;
+    });
+  }
 
   // 3D globe view toggle
   document.getElementById('view-3d-btn')?.addEventListener('click', () => {
@@ -2343,7 +2534,7 @@ function serializeStateToUrl() {
   const params = new URLSearchParams();
 
   // Core sliders
-  const sliderIds = ['freq', 'elev-min', 'elev-max', 'elev-step', 'fc', 'hm', 'sh', 'fh', 'max-hops'];
+  const sliderIds = ['freq', 'elev-min', 'elev-max', 'elev-step', 'fc', 'hm', 'sh', 'fh', 'max-hops', 'azimuth'];
   for (const id of sliderIds) {
     const el = document.getElementById(id);
     if (el) params.set(id, el.value);
@@ -2370,6 +2561,12 @@ function serializeStateToUrl() {
   if (txLatEl) params.set('tx-lat', txLatEl.value);
   if (txLonEl) params.set('tx-lon', txLonEl.value);
 
+  // RX destination
+  const rxLatEl = document.getElementById('rx-lat');
+  const rxLonEl = document.getElementById('rx-lon');
+  if (rxLatEl && rxLatEl.value !== '') params.set('rx-lat', rxLatEl.value);
+  if (rxLonEl && rxLonEl.value !== '') params.set('rx-lon', rxLonEl.value);
+
   window.history.replaceState(null, '', '#' + params.toString());
 }
 
@@ -2385,6 +2582,7 @@ function restoreStateFromUrl() {
     'freq': 'freq-val', 'elev-min': 'elev-min-val', 'elev-max': 'elev-max-val',
     'elev-step': 'elev-step-val', 'fc': 'fc-val', 'hm': 'hm-val',
     'sh': 'sh-val', 'fh': 'fh-val', 'max-hops': 'max-hops-val',
+    'azimuth': 'azimuth-val',
   };
   const floatFormat = new Set(['freq', 'elev-step', 'fc', 'fh']);
 
@@ -2406,6 +2604,13 @@ function restoreStateFromUrl() {
     const lat = txLat !== null ? parseFloat(txLat) : 40;
     const lon = txLon !== null ? parseFloat(txLon) : -80;
     setTxLocation(lat, lon, 'From URL', 'located');
+  }
+
+  // Restore RX destination
+  const rxLat = params.get('rx-lat');
+  const rxLon = params.get('rx-lon');
+  if (rxLat !== null && rxLon !== null) {
+    setRxLocation(parseFloat(rxLat), parseFloat(rxLon));
   }
 
   // Restore checkbox groups
@@ -2575,7 +2780,7 @@ function calculateMufLuf() {
         elev_min: 3,
         elev_max: 80,
         elev_step: 1,
-        azimuth_deg: 0.0,
+        azimuth_deg: getAzimuth(),
         tx_lat_deg: getTxLat(),
         fc, hm, sh, fh,
         step_size: 5.0,
@@ -2659,7 +2864,7 @@ function renderIonogram() {
       elev_min: 90,
       elev_max: 90,
       elev_step: 1,
-      azimuth_deg: 0.0,
+      azimuth_deg: getAzimuth(),
       tx_lat_deg: getTxLat(),
       fc, hm, sh, fh,
       step_size: 5.0,

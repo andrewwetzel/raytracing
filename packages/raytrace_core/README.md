@@ -1,6 +1,6 @@
-# raytrace_core
+# ionotrace
 
-[![Crates.io](https://img.shields.io/crates/v/raytrace_core.svg)](https://crates.io/crates/raytrace_core)
+[![Crates.io](https://img.shields.io/crates/v/ionotrace.svg)](https://crates.io/crates/ionotrace)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](../../LICENSE)
 
 High-performance ionospheric ray tracing engine in Rust. Implements the OT 75-76 algorithm for simulating HF radio wave propagation through the Earth's ionosphere.
@@ -23,8 +23,8 @@ Compiles to **WebAssembly** for in-browser use, or runs natively as a Rust libra
 ## Usage (Rust)
 
 ```rust
-use raytrace_core::params::ModelParams;
-use raytrace_core::tracer::trace_ray;
+use ionotrace::params::ModelParams;
+use ionotrace::tracer::trace_ray;
 
 let params = ModelParams::default(); // Chapman + Dipole + AHWFWC
 
@@ -54,7 +54,7 @@ println!("Returned: {}", result.returned_to_ground);
 When compiled with `wasm-pack build --target web`, the crate exposes a `trace_fan_wasm(json)` function that accepts and returns JSON strings:
 
 ```javascript
-import init, { trace_fan_wasm } from './pkg/raytrace_core.js';
+import init, { trace_fan_wasm } from './pkg/ionotrace.js';
 await init();
 
 const result = JSON.parse(trace_fan_wasm(JSON.stringify({

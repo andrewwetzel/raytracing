@@ -1,8 +1,8 @@
 //! Tests for the RK4/Adams-Moulton integrator
 
-use raytrace_core::params::*;
-use raytrace_core::hamiltonian::hamltn;
-use raytrace_core::integrator::*;
+use ionotrace::params::*;
+use ionotrace::hamiltonian::hamltn;
+use ionotrace::integrator::*;
 
 fn init_state() -> (IntegratorState, ModelParams) {
     let p = ModelParams::default();

@@ -1,7 +1,7 @@
 //! Tests for Hamilton's equations
 
-use raytrace_core::params::*;
-use raytrace_core::hamiltonian::hamltn;
+use ionotrace::params::*;
+use ionotrace::hamiltonian::hamltn;
 
 fn default_params() -> ModelParams {
     ModelParams::default()
