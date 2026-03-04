@@ -38,7 +38,13 @@ pub struct MagneticFieldResult {
 }
 
 /// Dispatch to selected magnetic field model.
-pub fn compute_mag(r: f64, theta: f64, phi: f64, freq_mhz: f64, p: &ModelParams) -> MagneticFieldResult {
+pub fn compute_mag(
+    r: f64,
+    theta: f64,
+    phi: f64,
+    freq_mhz: f64,
+    p: &ModelParams,
+) -> MagneticFieldResult {
     match p.mag_model {
         MagneticFieldModel::Constant => consty(r, theta, phi, freq_mhz, p),
         MagneticFieldModel::Cubic => cubey(r, theta, phi, freq_mhz, p),
@@ -68,11 +74,22 @@ fn dipoly(r: f64, theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> Magn
     let dydth = -3.0 * y * sinth * costh / (term9 * term9);
 
     MagneticFieldResult {
-        y, dydr, dydth, dydph: 0.0,
-        yr, yth, yph: 0.0,
-        dyrdr, dyrdth, dyrdph: 0.0,
-        dythdr, dythdth, dythdph: 0.0,
-        dyphdr: 0.0, dyphdth: 0.0, dyphdph: 0.0,
+        y,
+        dydr,
+        dydth,
+        dydph: 0.0,
+        yr,
+        yth,
+        yph: 0.0,
+        dyrdr,
+        dyrdth,
+        dyrdph: 0.0,
+        dythdr,
+        dythdth,
+        dythdph: 0.0,
+        dyphdr: 0.0,
+        dyphdth: 0.0,
+        dyphdph: 0.0,
     }
 }
 
@@ -80,11 +97,22 @@ fn dipoly(r: f64, theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> Magn
 fn consty(_r: f64, _theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> MagneticFieldResult {
     let y = p.fh / freq_mhz;
     MagneticFieldResult {
-        y, dydr: 0.0, dydth: 0.0, dydph: 0.0,
-        yr: y, yth: 0.0, yph: 0.0,
-        dyrdr: 0.0, dyrdth: 0.0, dyrdph: 0.0,
-        dythdr: 0.0, dythdth: 0.0, dythdph: 0.0,
-        dyphdr: 0.0, dyphdth: 0.0, dyphdph: 0.0,
+        y,
+        dydr: 0.0,
+        dydth: 0.0,
+        dydph: 0.0,
+        yr: y,
+        yth: 0.0,
+        yph: 0.0,
+        dyrdr: 0.0,
+        dyrdth: 0.0,
+        dyrdph: 0.0,
+        dythdr: 0.0,
+        dythdth: 0.0,
+        dythdph: 0.0,
+        dyphdr: 0.0,
+        dyphdth: 0.0,
+        dyphdph: 0.0,
     }
 }
 
@@ -98,11 +126,22 @@ fn cubey(r: f64, _theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> Magn
     let dyrdr = -3.0 * yr / r;
     let dythdr = -3.0 * yth / r;
     MagneticFieldResult {
-        y, dydr, dydth: 0.0, dydph: 0.0,
-        yr, yth, yph: 0.0,
-        dyrdr, dyrdth: 0.0, dyrdph: 0.0,
-        dythdr, dythdth: 0.0, dythdph: 0.0,
-        dyphdr: 0.0, dyphdth: 0.0, dyphdph: 0.0,
+        y,
+        dydr,
+        dydth: 0.0,
+        dydph: 0.0,
+        yr,
+        yth,
+        yph: 0.0,
+        dyrdr,
+        dyrdth: 0.0,
+        dyrdph: 0.0,
+        dythdr,
+        dythdth: 0.0,
+        dythdph: 0.0,
+        dyphdr: 0.0,
+        dyphdth: 0.0,
+        dyphdph: 0.0,
     }
 }
 
@@ -190,9 +229,7 @@ fn harmony(r: f64, theta: f64, phi: f64, freq_mhz: f64, p: &ModelParams) -> Magn
     }
 
     // Flat index helper: for degree n, order m → sum(i+1, i=1..n-1) + m
-    let idx = |n: usize, m: usize| -> usize {
-        n * (n + 1) / 2 - 1 + m
-    };
+    let idx = |n: usize, m: usize| -> usize { n * (n + 1) / 2 - 1 + m };
 
     const EOM: f64 = 1.7589e7; // e/m ratio (C/kg)
     let costh = theta.cos();
@@ -232,9 +269,11 @@ fn harmony(r: f64, theta: f64, phi: f64, freq_mhz: f64, p: &ModelParams) -> Magn
             let mf = m as f64;
             let a = (2.0 * nf - 1.0) * costh * pp[n - 1][m];
             let b = ((nf - 1.0 + mf) * (nf - 1.0 - mf) / ((2.0 * nf - 3.0) * 1.0)).sqrt()
-                * (2.0 * nf - 1.0).sqrt() * pp[n - 2][m];
+                * (2.0 * nf - 1.0).sqrt()
+                * pp[n - 2][m];
             pp[n][m] = (a - b) / ((nf + mf) * (nf - mf)).sqrt();
-            dp[n][m] = nf * costh * pp[n][m] / sinth - ((nf * nf - mf * mf) as f64).sqrt() * pp[n - 1][m] / sinth;
+            dp[n][m] =
+                nf * costh * pp[n][m] / sinth - (nf * nf - mf * mf).sqrt() * pp[n - 1][m] / sinth;
         }
     }
 
@@ -280,7 +319,8 @@ fn harmony(r: f64, theta: f64, phi: f64, freq_mhz: f64, p: &ModelParams) -> Magn
 
             dbt_dr += -drn_dr * cos_term * dp_nm;
             // d²P/dθ² approximated via recursion identity
-            let d2p = -nf * (nf + 1.0) * p_nm + mf * mf / (sinth * sinth) * p_nm + costh / sinth * dp_nm;
+            let d2p =
+                -nf * (nf + 1.0) * p_nm + mf * mf / (sinth * sinth) * p_nm + costh / sinth * dp_nm;
             dbt_dt += -rn * cos_term * d2p;
             dbt_dp += -rn * (-sin_term / mf.max(1.0) * mf) * dp_nm;
 
@@ -313,58 +353,77 @@ fn harmony(r: f64, theta: f64, phi: f64, freq_mhz: f64, p: &ModelParams) -> Magn
     let dydph = (yr * dyrdph + yth * dythdph + yph * dyphdph) / y;
 
     MagneticFieldResult {
-        y, dydr, dydth, dydph,
-        yr, yth, yph,
-        dyrdr, dyrdth, dyrdph,
-        dythdr, dythdth, dythdph,
-        dyphdr, dyphdth, dyphdph,
+        y,
+        dydr,
+        dydth,
+        dydph,
+        yr,
+        yth,
+        yph,
+        dyrdr,
+        dyrdth,
+        dyrdph,
+        dythdr,
+        dythdth,
+        dythdph,
+        dyphdr,
+        dyphdth,
+        dyphdph,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::params::*;
     // Tests for magnetic field models
-    
-    
-    
-    
+
     const EPS: f64 = 1e-10;
-    
+
     fn default_params() -> ModelParams {
         ModelParams::default()
     }
-    
+
     // ---- DIPOLY (default) ----
-    
+
     #[test]
     fn test_dipoly_at_equator() {
         let p = default_params(); // fh=0.8, freq=10
         let r = EARTH_RADIUS + 250.0;
         let mag = compute_mag(r, PID2, 0.0, 10.0, &p);
         assert!(mag.y > 0.0, "DIPOLY |Y| should be positive");
-        assert!(mag.yr.abs() < EPS, "DIPOLY yr at equator (cosθ=0) should be ~0");
-        assert!(mag.yth > 0.0, "DIPOLY yθ at equator should be positive (sinθ=1)");
+        assert!(
+            mag.yr.abs() < EPS,
+            "DIPOLY yr at equator (cosθ=0) should be ~0"
+        );
+        assert!(
+            mag.yth > 0.0,
+            "DIPOLY yθ at equator should be positive (sinθ=1)"
+        );
     }
-    
+
     #[test]
     fn test_dipoly_at_pole() {
         let p = default_params();
         let r = EARTH_RADIUS + 250.0;
         let mag = compute_mag(r, 0.01, 0.0, 10.0, &p); // near north pole (θ ≈ 0)
         assert!(mag.y > 0.0, "DIPOLY |Y| at pole should be positive");
-        assert!(mag.yr.abs() > mag.yth.abs(), "DIPOLY yr should dominate at pole");
+        assert!(
+            mag.yr.abs() > mag.yth.abs(),
+            "DIPOLY yr should dominate at pole"
+        );
     }
-    
+
     #[test]
     fn test_dipoly_decreases_with_altitude() {
         let p = default_params();
         let mag_low = compute_mag(EARTH_RADIUS + 100.0, PID2, 0.0, 10.0, &p);
         let mag_high = compute_mag(EARTH_RADIUS + 500.0, PID2, 0.0, 10.0, &p);
-        assert!(mag_low.y > mag_high.y, "Dipole field should decrease with altitude");
+        assert!(
+            mag_low.y > mag_high.y,
+            "Dipole field should decrease with altitude"
+        );
     }
-    
+
     #[test]
     fn test_dipoly_r_cubed_scaling() {
         let p = default_params();
@@ -376,25 +435,32 @@ mod tests {
         // So y1/y2 = (r2/r1)^3
         let expected_ratio = (r2 / r1).powi(3);
         let actual_ratio = mag1.y / mag2.y;
-        assert!((actual_ratio - expected_ratio).abs() / expected_ratio < 0.01,
-            "Dipole should follow r^-3: expected ratio {}, got {}", expected_ratio, actual_ratio);
+        assert!(
+            (actual_ratio - expected_ratio).abs() / expected_ratio < 0.01,
+            "Dipole should follow r^-3: expected ratio {}, got {}",
+            expected_ratio,
+            actual_ratio
+        );
     }
-    
+
     // ---- CONSTY ----
-    
+
     #[test]
     fn test_consty_constant() {
         let mut p = default_params();
         p.mag_model = crate::params::MagneticFieldModel::Constant;
         let mag1 = compute_mag(EARTH_RADIUS + 100.0, PID2, 0.0, 10.0, &p);
         let mag2 = compute_mag(EARTH_RADIUS + 500.0, 1.0, 1.0, 10.0, &p);
-        assert!((mag1.y - mag2.y).abs() < EPS, "CONSTY should be constant everywhere");
+        assert!(
+            (mag1.y - mag2.y).abs() < EPS,
+            "CONSTY should be constant everywhere"
+        );
         assert_eq!(mag1.dydr, 0.0, "CONSTY dydr should be 0");
         assert_eq!(mag1.dydth, 0.0, "CONSTY dydth should be 0");
     }
-    
+
     // ---- CUBEY ----
-    
+
     #[test]
     fn test_cubey() {
         let mut p = default_params();
@@ -403,11 +469,14 @@ mod tests {
         let mag = compute_mag(EARTH_RADIUS + 250.0, PID2, 0.0, 10.0, &p);
         assert!(mag.y > 0.0, "CUBEY should give positive |Y|");
         assert!(mag.yr.abs() > 0.0, "CUBEY with non-zero dip should have yr");
-        assert!(mag.yth.abs() > 0.0, "CUBEY with non-zero dip should have yth");
+        assert!(
+            mag.yth.abs() > 0.0,
+            "CUBEY with non-zero dip should have yth"
+        );
     }
-    
+
     // ---- HARMONY (IGRF-14) ----
-    
+
     #[test]
     fn test_harmony_gives_reasonable_field() {
         let mut p = default_params();
@@ -416,11 +485,15 @@ mod tests {
         let r = EARTH_RADIUS + 200.0; // 200 km altitude
         let mag = compute_mag(r, PID2, 0.0, 10.0, &p);
         assert!(mag.y > 0.0, "HARMONY should give positive |Y|");
-        assert!(mag.y.is_finite(), "HARMONY Y should be finite, got {}", mag.y);
+        assert!(
+            mag.y.is_finite(),
+            "HARMONY Y should be finite, got {}",
+            mag.y
+        );
         // Field should have non-zero derivatives at this altitude
         assert!(mag.dydr.is_finite(), "HARMONY dydr should be finite");
     }
-    
+
     #[test]
     fn test_harmony_epoch_interpolation() {
         let mut p = default_params();
@@ -430,10 +503,12 @@ mod tests {
         p.epoch_year = 2030.0;
         let mag_2030 = compute_mag(EARTH_RADIUS, PID2, 0.0, 10.0, &p);
         // Field should be slightly different at different epochs
-        assert!((mag_2025.y - mag_2030.y).abs() > 1e-6,
-            "HARMONY at different epochs should differ");
+        assert!(
+            (mag_2025.y - mag_2030.y).abs() > 1e-6,
+            "HARMONY at different epochs should differ"
+        );
     }
-    
+
     #[test]
     fn test_harmony_phi_dependence() {
         let mut p = default_params();
@@ -441,12 +516,14 @@ mod tests {
         let mag_0 = compute_mag(EARTH_RADIUS + 200.0, 1.0, 0.0, 10.0, &p);
         let mag_pi = compute_mag(EARTH_RADIUS + 200.0, 1.0, std::f64::consts::PI, 10.0, &p);
         // IGRF has phi dependence (unlike dipole)
-        assert!((mag_0.y - mag_pi.y).abs() > 1e-6,
-            "HARMONY should have longitude dependence");
+        assert!(
+            (mag_0.y - mag_pi.y).abs() > 1e-6,
+            "HARMONY should have longitude dependence"
+        );
     }
-    
+
     // ---- All models produce finite values ----
-    
+
     #[test]
     fn test_all_mag_models_finite() {
         for model in [
@@ -460,10 +537,13 @@ mod tests {
             p.dip = 0.5;
             let mag = compute_mag(EARTH_RADIUS + 200.0, 1.0, 0.5, 10.0, &p);
             assert!(mag.y.is_finite(), "Mag model {:?} y not finite", model);
-            assert!(mag.dydr.is_finite(), "Mag model {:?} dydr not finite", model);
+            assert!(
+                mag.dydr.is_finite(),
+                "Mag model {:?} dydr not finite",
+                model
+            );
             assert!(mag.yr.is_finite(), "Mag model {:?} yr not finite", model);
             assert!(mag.yth.is_finite(), "Mag model {:?} yth not finite", model);
         }
     }
-    
 }

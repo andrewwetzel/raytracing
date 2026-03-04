@@ -9,7 +9,7 @@ pub(crate) const PID2: f64 = PI / 2.0;
 /// Speed of light in km/s
 pub(crate) const C: f64 = 2.997925e5;
 /// ln(10) — used for dB absorption conversion
-pub(crate) const LOGTEN: f64 = 2.302585092994046;
+pub(crate) const LOGTEN: f64 = core::f64::consts::LN_10;
 /// Mean Earth radius in km
 pub const EARTH_RADIUS: f64 = 6370.0;
 
@@ -21,7 +21,9 @@ pub const EARTH_RADIUS: f64 = 6370.0;
 ///
 /// Selects how the ionospheric electron density varies with altitude and position.
 #[non_exhaustive]
-#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq, Hash,
+)]
 pub enum ElectronDensityModel {
     /// Chapman layer — classic single-layer profile with analytic gradients.
     #[default]
@@ -42,7 +44,9 @@ pub enum ElectronDensityModel {
 ///
 /// Selects the geomagnetic field model used for magneto-ionic splitting.
 #[non_exhaustive]
-#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq, Hash,
+)]
 pub enum MagneticFieldModel {
     /// Centered dipole — simple but captures essential field geometry.
     #[default]
@@ -59,7 +63,9 @@ pub enum MagneticFieldModel {
 ///
 /// Selects how electron-neutral collision frequency varies with altitude.
 #[non_exhaustive]
-#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq, Hash,
+)]
 pub enum CollisionModel {
     /// Double-exponential (EXPZ2) — two exponential terms for realistic profile.
     #[default]
@@ -74,7 +80,9 @@ pub enum CollisionModel {
 ///
 /// Selects which terms are included in the Appleton-Hartree formula.
 #[non_exhaustive]
-#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq, Hash,
+)]
 pub enum RefractiveIndexModel {
     /// Full Appleton-Hartree — magnetic field + collisions. Most accurate.
     #[default]
@@ -91,7 +99,9 @@ pub enum RefractiveIndexModel {
 ///
 /// Adds a localized density modification on top of the background profile.
 #[non_exhaustive]
-#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq, Hash,
+)]
 pub enum PerturbationModel {
     /// No perturbation — undisturbed ionosphere.
     #[default]
@@ -112,7 +122,9 @@ pub enum PerturbationModel {
 ///
 /// The Earth's magnetic field splits radio waves into two modes.
 #[non_exhaustive]
-#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq, Hash,
+)]
 pub enum RayMode {
     /// Extraordinary (X-mode) — refracts at a higher frequency than O-mode.
     #[default]
@@ -128,11 +140,6 @@ impl RayMode {
             RayMode::Extraordinary => -1.0,
             RayMode::Ordinary => 1.0,
         }
-    }
-
-    /// Convert from the frontend numeric convention (-1 = X, +1 = O).
-    pub(crate) fn from_sign(v: f64) -> Self {
-        if v > 0.0 { RayMode::Ordinary } else { RayMode::Extraordinary }
     }
 }
 
@@ -155,7 +162,7 @@ impl RayMode {
 ///     fc: 8.0,
 ///     ..ModelParams::default()
 /// };
-/// ```ignore
+/// ```
 ///
 /// # Stability
 ///
@@ -169,7 +176,6 @@ pub struct ModelParams {
     pub earth_r: f64,
 
     // ---- Model selectors ----
-
     /// Electron density profile model.
     pub ed_model: ElectronDensityModel,
     /// Magnetic field model.
@@ -182,7 +188,6 @@ pub struct ModelParams {
     pub pert_model: PerturbationModel,
 
     // ---- Electron density parameters ----
-
     /// Critical frequency foF2 in MHz (default: 10.0).
     pub fc: f64,
     /// Peak height hmF2 in km (default: 250.0).
@@ -203,7 +208,6 @@ pub struct ModelParams {
     pub ym: f64,
 
     // ---- Second layer (DualChapman) ----
-
     /// Second layer critical frequency in MHz.
     pub fc2: f64,
     /// Second layer peak height in km.
@@ -212,12 +216,10 @@ pub struct ModelParams {
     pub sh2: f64,
 
     // ---- VarChapman ----
-
     /// Exponent for variable-Chapman scale height (default: 3.0).
     pub chi: f64,
 
     // ---- Magnetic field ----
-
     /// Gyrofrequency fH in MHz (default: 0.8).
     pub fh: f64,
     /// Dip angle in radians (for Cubic model).
@@ -226,7 +228,6 @@ pub struct ModelParams {
     pub epoch_year: f64,
 
     // ---- Collision frequency ----
-
     /// First collision term amplitude (default: 1,050,000).
     pub nu1: f64,
     /// First collision reference height in km (default: 100.0).
@@ -241,7 +242,6 @@ pub struct ModelParams {
     pub a2: f64,
 
     // ---- Perturbation parameters ----
-
     /// Perturbation parameter 1 (model-dependent).
     pub p1: f64,
     /// Perturbation parameter 2 (model-dependent).
@@ -281,16 +281,37 @@ impl Default for ModelParams {
             col_model: CollisionModel::default(),
             rindex_model: RefractiveIndexModel::default(),
             pert_model: PerturbationModel::default(),
-            fc: 10.0, hm: 250.0, sh: 100.0, alpha: 0.5,
-            ed_a: 0.0, ed_b: 0.0, ed_c: 0.0, ed_e: 0.0,
+            fc: 10.0,
+            hm: 250.0,
+            sh: 100.0,
+            alpha: 0.5,
+            ed_a: 0.0,
+            ed_b: 0.0,
+            ed_c: 0.0,
+            ed_e: 0.0,
             ym: 100.0,
-            fc2: 0.0, hm2: 0.0, sh2: 0.0,
+            fc2: 0.0,
+            hm2: 0.0,
+            sh2: 0.0,
             chi: 3.0,
-            fh: 0.8, dip: 0.0, epoch_year: 2025.0,
-            nu1: 1_050_000.0, h1: 100.0, a1: 0.148,
-            nu2: 30.0, h2: 140.0, a2: 0.0183,
-            p1: 0.0, p2: 0.0, p3: 0.0, p4: 0.0, p5: 0.0,
-            p6: 0.0, p7: 0.0, p8: 0.0, p9: 0.0,
+            fh: 0.8,
+            dip: 0.0,
+            epoch_year: 2025.0,
+            nu1: 1_050_000.0,
+            h1: 100.0,
+            a1: 0.148,
+            nu2: 30.0,
+            h2: 140.0,
+            a2: 0.0183,
+            p1: 0.0,
+            p2: 0.0,
+            p3: 0.0,
+            p4: 0.0,
+            p5: 0.0,
+            p6: 0.0,
+            p7: 0.0,
+            p8: 0.0,
+            p9: 0.0,
         }
     }
 }

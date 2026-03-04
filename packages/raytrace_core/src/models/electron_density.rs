@@ -16,7 +16,13 @@ pub struct ElectronDensityResult {
 }
 
 /// Dispatch to the selected electron density model, then apply perturbation.
-pub fn compute_ed(r: f64, theta: f64, phi: f64, freq_mhz: f64, p: &ModelParams) -> ElectronDensityResult {
+pub fn compute_ed(
+    r: f64,
+    theta: f64,
+    phi: f64,
+    freq_mhz: f64,
+    p: &ModelParams,
+) -> ElectronDensityResult {
     let mut ed = match p.ed_model {
         ElectronDensityModel::Elect1 => elect1_ed(r, theta, phi, freq_mhz, p),
         ElectronDensityModel::Linear => linear(r, theta, phi, freq_mhz, p),
@@ -56,18 +62,36 @@ fn chapx(r: f64, theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> Elect
     let mut dxdth = x * (d * p.ed_a * (PID2 - d * theta2).sin() + p.ed_c) / temp;
     dxdth -= dxdr * p.earth_r * p.ed_e;
 
-    ElectronDensityResult { x, dxdr, dxdth, dxdph: 0.0, dxdt: 0.0 }
+    ElectronDensityResult {
+        x,
+        dxdr,
+        dxdth,
+        dxdph: 0.0,
+        dxdt: 0.0,
+    }
 }
 
 /// Simple exponential layer (ELECT1)
-fn elect1_ed(r: f64, _theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> ElectronDensityResult {
+fn elect1_ed(
+    r: f64,
+    _theta: f64,
+    _phi: f64,
+    freq_mhz: f64,
+    p: &ModelParams,
+) -> ElectronDensityResult {
     let h = r - p.earth_r;
     let z = (h - p.hm) / p.sh;
     let fc_f = p.fc / freq_mhz;
     let x = fc_f * fc_f * (1.0 - z - (-z).exp()).exp();
     let dxdr = -x * (1.0 - (-z).exp()) / p.sh;
 
-    ElectronDensityResult { x, dxdr, dxdth: 0.0, dxdph: 0.0, dxdt: 0.0 }
+    ElectronDensityResult {
+        x,
+        dxdr,
+        dxdth: 0.0,
+        dxdph: 0.0,
+        dxdt: 0.0,
+    }
 }
 
 /// Piecewise-linear density (LINEAR)
@@ -88,7 +112,13 @@ fn linear(r: f64, _theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> Ele
         }
     };
 
-    ElectronDensityResult { x, dxdr, dxdth: 0.0, dxdph: 0.0, dxdt: 0.0 }
+    ElectronDensityResult {
+        x,
+        dxdr,
+        dxdth: 0.0,
+        dxdph: 0.0,
+        dxdt: 0.0,
+    }
 }
 
 /// Quasi-parabolic density (QPARAB)
@@ -99,7 +129,13 @@ fn qparab(r: f64, _theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> Ele
     let fc2 = fc_f * fc_f;
 
     if r <= rb || r <= 0.0 {
-        return ElectronDensityResult { x: 0.0, dxdr: 0.0, dxdth: 0.0, dxdph: 0.0, dxdt: 0.0 };
+        return ElectronDensityResult {
+            x: 0.0,
+            dxdr: 0.0,
+            dxdth: 0.0,
+            dxdph: 0.0,
+            dxdt: 0.0,
+        };
     }
 
     let half_ym = p.ym / 2.0;
@@ -119,27 +155,51 @@ fn qparab(r: f64, _theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> Ele
         dxdr = 0.0;
     }
 
-    ElectronDensityResult { x, dxdr, dxdth: 0.0, dxdph: 0.0, dxdt: 0.0 }
+    ElectronDensityResult {
+        x,
+        dxdr,
+        dxdth: 0.0,
+        dxdph: 0.0,
+        dxdt: 0.0,
+    }
 }
 
 /// Variable Chapman (VCHAPX) — uses tau = (hm/h)^chi exponent
 fn vchapx(r: f64, _theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> ElectronDensityResult {
     let h = r - p.earth_r;
     if h <= 0.0 {
-        return ElectronDensityResult { x: 0.0, dxdr: 0.0, dxdth: 0.0, dxdph: 0.0, dxdt: 0.0 };
+        return ElectronDensityResult {
+            x: 0.0,
+            dxdr: 0.0,
+            dxdth: 0.0,
+            dxdph: 0.0,
+            dxdt: 0.0,
+        };
     }
     let fc_f = p.fc / freq_mhz;
     let tau = (p.hm / h).powf(p.chi);
     let x = fc_f * fc_f * tau.sqrt() * (0.5 * (1.0 - tau)).exp();
     let dxdr = 0.5 * x * (tau - 1.0) * p.chi / h;
-    ElectronDensityResult { x, dxdr, dxdth: 0.0, dxdph: 0.0, dxdt: 0.0 }
+    ElectronDensityResult {
+        x,
+        dxdr,
+        dxdth: 0.0,
+        dxdph: 0.0,
+        dxdt: 0.0,
+    }
 }
 
 /// Dual-layer Chapman (DCHAPT) — two layers with latitude variation
 fn dchapt(r: f64, theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> ElectronDensityResult {
     let h = r - p.earth_r;
     if h <= 0.0 {
-        return ElectronDensityResult { x: 0.0, dxdr: 0.0, dxdth: 0.0, dxdph: 0.0, dxdt: 0.0 };
+        return ElectronDensityResult {
+            x: 0.0,
+            dxdr: 0.0,
+            dxdth: 0.0,
+            dxdph: 0.0,
+            dxdt: 0.0,
+        };
     }
     let theta2 = theta - PID2;
     let earthe = p.earth_r * p.ed_e;
@@ -162,7 +222,13 @@ fn dchapt(r: f64, theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> Elec
         dxdr += dxdr2;
         dxdth += x2 * p.ed_c / temp - dxdr2 * earthe;
     }
-    ElectronDensityResult { x, dxdr, dxdth, dxdph: 0.0, dxdt: 0.0 }
+    ElectronDensityResult {
+        x,
+        dxdr,
+        dxdth,
+        dxdph: 0.0,
+        dxdt: 0.0,
+    }
 }
 
 // ---- Perturbation modifiers (applied after base ED model) ----
@@ -170,8 +236,12 @@ fn dchapt(r: f64, theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> Elec
 
 /// Torus perturbation — Gaussian enhancement in tilted coordinates
 fn apply_torus(ed: &mut ElectronDensityResult, r: f64, theta: f64, _phi: f64, p: &ModelParams) {
-    if ed.x == 0.0 && ed.dxdr == 0.0 && ed.dxdth == 0.0 { return; }
-    if p.p1 == 0.0 { return; }
+    if ed.x == 0.0 && ed.dxdr == 0.0 && ed.dxdth == 0.0 {
+        return;
+    }
+    if p.p1 == 0.0 {
+        return;
+    }
     let r0 = p.earth_r + p.p5;
     let z = r - r0;
     let lambda = r0 * (theta - PID2);
@@ -190,8 +260,12 @@ fn apply_torus(ed: &mut ElectronDensityResult, r: f64, theta: f64, _phi: f64, p:
 
 /// Trough perturbation — latitude-dependent Gaussian depletion
 fn apply_trough(ed: &mut ElectronDensityResult, _r: f64, theta: f64, _phi: f64, p: &ModelParams) {
-    if ed.x == 0.0 && ed.dxdr == 0.0 && ed.dxdth == 0.0 { return; }
-    if p.p1 == 0.0 { return; }
+    if ed.x == 0.0 && ed.dxdr == 0.0 && ed.dxdth == 0.0 {
+        return;
+    }
+    if p.p1 == 0.0 {
+        return;
+    }
     let angle_raw = theta + p.p3 - PID2;
     let width = if angle_raw > 0.0 { p.p4 * p.p2 } else { p.p2 };
     let angle = angle_raw / width;
@@ -205,8 +279,12 @@ fn apply_trough(ed: &mut ElectronDensityResult, _r: f64, theta: f64, _phi: f64, 
 
 /// Shock (TID) perturbation — travelling ionospheric disturbance
 fn apply_shock(ed: &mut ElectronDensityResult, r: f64, theta: f64, phi: f64, p: &ModelParams) {
-    if ed.x == 0.0 && ed.dxdr == 0.0 && ed.dxdth == 0.0 { return; }
-    if p.p1 == 0.0 || p.p2 == 0.0 { return; }
+    if ed.x == 0.0 && ed.dxdr == 0.0 && ed.dxdth == 0.0 {
+        return;
+    }
+    if p.p1 == 0.0 || p.p2 == 0.0 {
+        return;
+    }
     let h = r - p.earth_r;
     let rhoc = p.p5 * (h - p.p6) - p.p2;
     let lon = phi - p.p4;
@@ -232,8 +310,17 @@ fn apply_shock(ed: &mut ElectronDensityResult, r: f64, theta: f64, phi: f64, p: 
 }
 
 /// Bulge perturbation — equatorial enhancement
-fn apply_bulge(ed: &mut ElectronDensityResult, r: f64, theta: f64, phi: f64, _freq: f64, p: &ModelParams) {
-    if p.p2 <= 0.0 || p.p3 == 0.0 { return; }
+fn apply_bulge(
+    ed: &mut ElectronDensityResult,
+    r: f64,
+    theta: f64,
+    phi: f64,
+    _freq: f64,
+    p: &ModelParams,
+) {
+    if p.p2 <= 0.0 || p.p3 == 0.0 {
+        return;
+    }
     let hmax = p.p1 + 5.0 * p.p2;
     let h = r - (p.earth_r + hmax);
     let e = (h / p.p2).exp();
@@ -248,7 +335,9 @@ fn apply_bulge(ed: &mut ElectronDensityResult, r: f64, theta: f64, phi: f64, _fr
 
 /// Exponential perturbation (EXPX)
 fn apply_expx_pert(ed: &mut ElectronDensityResult, r: f64, p: &ModelParams) {
-    if p.p2 <= 0.0 || p.p3 == 0.0 { return; }
+    if p.p2 <= 0.0 || p.p3 == 0.0 {
+        return;
+    }
     let hmax = p.p1 + 5.0 * p.p2;
     let h = r - (p.earth_r + hmax);
     let x_add = p.p3 * (h / p.p2).exp();
@@ -259,18 +348,14 @@ fn apply_expx_pert(ed: &mut ElectronDensityResult, r: f64, p: &ModelParams) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::params::*;
     // Tests for electron density models and perturbations
-    
-    
-    
-    
+
     fn default_params() -> ModelParams {
         ModelParams::default()
     }
-    
+
     // ---- CHAPX (default) ----
-    
+
     #[test]
     fn test_chapx_at_peak() {
         let p = default_params(); // hm=250, fc=10, freq=10 → x = fc²/freq² * exp(0) = 1.0 at peak
@@ -278,9 +363,13 @@ mod tests {
         let ed = compute_ed(r, PID2, 0.0, p.fc, &p);
         // At peak height with alpha=0.5 and z=0: x = (fc/freq)^2 * exp(alpha*(exz-z))
         // z=0 → exz=0, so x = 1.0 * exp(0) = 1.0
-        assert!((ed.x - 1.0).abs() < 0.01, "CHAPX x at peak should be ~1.0, got {}", ed.x);
+        assert!(
+            (ed.x - 1.0).abs() < 0.01,
+            "CHAPX x at peak should be ~1.0, got {}",
+            ed.x
+        );
     }
-    
+
     #[test]
     fn test_chapx_above_peak() {
         let p = default_params();
@@ -288,9 +377,12 @@ mod tests {
         let ed = compute_ed(r, PID2, 0.0, p.fc, &p);
         assert!(ed.x < 1.0, "CHAPX x above peak should be < 1.0");
         assert!(ed.x > 0.0, "CHAPX x above peak should be > 0.0");
-        assert!(ed.dxdr < 0.0, "CHAPX dxdr above peak should be negative (decreasing)");
+        assert!(
+            ed.dxdr < 0.0,
+            "CHAPX dxdr above peak should be negative (decreasing)"
+        );
     }
-    
+
     #[test]
     fn test_chapx_below_peak() {
         let p = default_params();
@@ -298,21 +390,27 @@ mod tests {
         let ed = compute_ed(r, PID2, 0.0, p.fc, &p);
         assert!(ed.x > 0.0, "CHAPX x below peak should be > 0.0");
         assert!(ed.x < 1.0, "CHAPX x below peak should be < 1.0");
-        assert!(ed.dxdr > 0.0, "CHAPX dxdr below peak should be positive (increasing)");
+        assert!(
+            ed.dxdr > 0.0,
+            "CHAPX dxdr below peak should be positive (increasing)"
+        );
     }
-    
+
     #[test]
     fn test_chapx_frequency_scaling() {
         let p = default_params();
         let r = EARTH_RADIUS + p.hm;
         let ed_10 = compute_ed(r, PID2, 0.0, 10.0, &p); // freq = fc
         let ed_20 = compute_ed(r, PID2, 0.0, 20.0, &p); // freq = 2*fc
-        // x scales as (fc/freq)^2, so at 20 MHz: x = (10/20)^2 * x_10 = 0.25 * x_10
-        assert!((ed_20.x - ed_10.x * 0.25).abs() < 0.01, "Higher freq should reduce x by (fc/freq)²");
+                                                        // x scales as (fc/freq)^2, so at 20 MHz: x = (10/20)^2 * x_10 = 0.25 * x_10
+        assert!(
+            (ed_20.x - ed_10.x * 0.25).abs() < 0.01,
+            "Higher freq should reduce x by (fc/freq)²"
+        );
     }
-    
+
     // ---- ELECT1 ----
-    
+
     #[test]
     fn test_elect1() {
         let mut p = default_params();
@@ -322,9 +420,9 @@ mod tests {
         assert!(ed.x > 0.0, "ELECT1 should give positive x at peak");
         assert_eq!(ed.dxdth, 0.0, "ELECT1 has no theta dependence");
     }
-    
+
     // ---- LINEAR ----
-    
+
     #[test]
     fn test_linear_below_peak() {
         let mut p = default_params();
@@ -334,7 +432,7 @@ mod tests {
         assert!(ed.x > 0.0, "LINEAR below peak should be positive");
         assert!(ed.dxdr > 0.0, "LINEAR below peak should be increasing");
     }
-    
+
     #[test]
     fn test_linear_at_peak() {
         let mut p = default_params();
@@ -344,7 +442,7 @@ mod tests {
         // At exactly hm: x = fc²/freq² * hm/hm = 1.0
         assert!((ed.x - 1.0).abs() < 0.01, "LINEAR at peak should be ~1.0");
     }
-    
+
     #[test]
     fn test_linear_above_topside() {
         let mut p = default_params();
@@ -354,9 +452,9 @@ mod tests {
         let ed = compute_ed(r, PID2, 0.0, p.fc, &p);
         assert_eq!(ed.x, 0.0, "LINEAR above topside should be 0");
     }
-    
+
     // ---- QPARAB ----
-    
+
     #[test]
     fn test_qparab_at_peak() {
         let mut p = default_params();
@@ -365,7 +463,7 @@ mod tests {
         let ed = compute_ed(r, PID2, 0.0, p.fc, &p);
         assert!((ed.x - 1.0).abs() < 0.01, "QPARAB at peak should be ~1.0");
     }
-    
+
     #[test]
     fn test_qparab_below_bottom() {
         let mut p = default_params();
@@ -376,9 +474,9 @@ mod tests {
         let ed = compute_ed(r, PID2, 0.0, p.fc, &p);
         assert_eq!(ed.x, 0.0, "QPARAB below bottom should be 0");
     }
-    
+
     // ---- VCHAPX ----
-    
+
     #[test]
     fn test_vchapx() {
         let mut p = default_params();
@@ -387,7 +485,7 @@ mod tests {
         let ed = compute_ed(r, PID2, 0.0, p.fc, &p);
         assert!(ed.x > 0.0, "VCHAPX at peak height should be positive");
     }
-    
+
     #[test]
     fn test_vchapx_at_ground() {
         let mut p = default_params();
@@ -396,9 +494,9 @@ mod tests {
         let ed = compute_ed(r, PID2, 0.0, p.fc, &p);
         assert_eq!(ed.x, 0.0, "VCHAPX at ground (h=0) should be 0");
     }
-    
+
     // ---- DCHAPT ----
-    
+
     #[test]
     fn test_dchapt_single_layer() {
         let mut p = default_params();
@@ -408,7 +506,7 @@ mod tests {
         let ed = compute_ed(r, PID2, 0.0, p.fc, &p);
         assert!(ed.x > 0.0, "DCHAPT single layer should be positive at peak");
     }
-    
+
     #[test]
     fn test_dchapt_dual_layer() {
         let mut p = default_params();
@@ -420,44 +518,50 @@ mod tests {
         let ed = compute_ed(r, PID2, 0.0, p.fc, &p);
         assert!(ed.x > 0.0, "DCHAPT dual layer should be positive");
     }
-    
+
     // ---- Perturbation: TORUS ----
-    
+
     #[test]
     fn test_torus_perturbation_amplifies() {
         let mut p = default_params();
         let r = EARTH_RADIUS + p.hm;
         let ed_base = compute_ed(r, PID2, 0.0, p.fc, &p);
-    
+
         p.pert_model = crate::params::PerturbationModel::Torus;
         p.p1 = 0.5; // 50% enhancement
         p.p2 = 200.0; // width in km
         p.p3 = 200.0;
         p.p4 = 0.0; // no tilt
-        p.p5 = p.hm;  // center at peak
+        p.p5 = p.hm; // center at peak
         let ed_pert = compute_ed(r, PID2, 0.0, p.fc, &p);
-        assert!(ed_pert.x > ed_base.x, "Torus perturbation should amplify ED");
+        assert!(
+            ed_pert.x > ed_base.x,
+            "Torus perturbation should amplify ED"
+        );
     }
-    
+
     // ---- Perturbation: TROUGH ----
-    
+
     #[test]
     fn test_trough_perturbation_depletes() {
         let mut p = default_params();
         let r = EARTH_RADIUS + p.hm;
         let ed_base = compute_ed(r, PID2, 0.0, p.fc, &p);
-    
+
         p.pert_model = crate::params::PerturbationModel::Trough;
         p.p1 = -0.5; // 50% depletion
         p.p2 = 0.1;
         p.p3 = 0.0;
         p.p4 = 1.0;
         let ed_pert = compute_ed(r, PID2, 0.0, p.fc, &p);
-        assert!(ed_pert.x < ed_base.x, "Trough perturbation should deplete ED");
+        assert!(
+            ed_pert.x < ed_base.x,
+            "Trough perturbation should deplete ED"
+        );
     }
-    
+
     // ---- All models produce finite values ----
-    
+
     #[test]
     fn test_all_ed_models_finite() {
         for model in [
@@ -474,9 +578,16 @@ mod tests {
             let ed = compute_ed(r, PID2, 0.0, p.fc, &p);
             assert!(ed.x.is_finite(), "ED model {:?} x not finite", model);
             assert!(ed.dxdr.is_finite(), "ED model {:?} dxdr not finite", model);
-            assert!(ed.dxdth.is_finite(), "ED model {:?} dxdth not finite", model);
-            assert!(ed.dxdph.is_finite(), "ED model {:?} dxdph not finite", model);
+            assert!(
+                ed.dxdth.is_finite(),
+                "ED model {:?} dxdth not finite",
+                model
+            );
+            assert!(
+                ed.dxdph.is_finite(),
+                "ED model {:?} dxdph not finite",
+                model
+            );
         }
     }
-    
 }

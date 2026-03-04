@@ -1,8 +1,8 @@
 //! Fan tracing API for computing multiple rays across an elevation spread.
 
+use crate::error::TraceError;
 use crate::params::ModelParams;
 use crate::tracer::trace_ray;
-use crate::error::TraceError;
 use serde::{Deserialize, Serialize};
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -92,71 +92,83 @@ pub fn fan_trace(config: &FanTraceConfig) -> Result<FanTraceResult, TraceError> 
     #[cfg(target_arch = "wasm32")]
     let iter = elevations.into_iter();
 
-    let rays: Vec<FanRay> = iter.filter_map(|elev| {
-        let mut all_pts: Vec<FanRayPoint> = Vec::new();
-        let mut total_range = 0.0f64;
-        let mut max_h = 0.0f64;
-        let mut returned = false;
-        let mut hops_completed: u8 = 0;
-        let mut total_absorption = 0.0f64;
+    let rays: Vec<FanRay> = iter
+        .filter_map(|elev| {
+            let mut all_pts: Vec<FanRayPoint> = Vec::new();
+            let mut total_range = 0.0f64;
+            let mut max_h = 0.0f64;
+            let mut returned = false;
+            let mut hops_completed: u8 = 0;
+            let mut total_absorption = 0.0f64;
 
-        let mut cur_lat = config.tx_lat_deg;
-        
-        for _hop in 0..config.max_hops {
-            let result = match trace_ray(
-                config.freq_mhz, config.ray_mode,
-                elev, config.azimuth_deg, cur_lat,
-                2, config.step_size, config.max_steps,
-                1e-4, 2e-6, 100.0,
-                &config.params, 1,
-            ) {
-                Ok(r) => r,
-                Err(_) => break, // Stop tracing this ray on error
-            };
+            let mut cur_lat = config.tx_lat_deg;
 
-            if result.max_height > max_h { max_h = result.max_height; }
+            for _hop in 0..config.max_hops {
+                let result = match trace_ray(
+                    config.freq_mhz,
+                    config.ray_mode,
+                    elev,
+                    config.azimuth_deg,
+                    cur_lat,
+                    2,
+                    config.step_size,
+                    config.max_steps,
+                    1e-4,
+                    2e-6,
+                    100.0,
+                    &config.params,
+                    1,
+                ) {
+                    Ok(r) => r,
+                    Err(_) => break, // Stop tracing this ray on error
+                };
 
-            for pt in &result.points {
-                all_pts.push(FanRayPoint {
-                    h: (pt.height_km * 100.0).round() / 100.0,
-                    t: (pt.t * 100.0).round() / 100.0,
-                    lat: (pt.lat_deg * 10000.0).round() / 10000.0,
-                    lon: (pt.lon_deg * 10000.0).round() / 10000.0,
-                    range: ((total_range + pt.ground_range_km) * 10.0).round() / 10.0,
-                });
-            }
-
-            if result.returned_to_ground {
-                hops_completed += 1;
-                total_range += result.ground_range_km;
-                returned = true;
-                
-                if let Some(last_pt) = result.points.last() {
-                    total_absorption += last_pt.absorption;
+                if result.max_height > max_h {
+                    max_h = result.max_height;
                 }
 
-                if _hop < config.max_hops - 1 {
+                for pt in &result.points {
+                    all_pts.push(FanRayPoint {
+                        h: (pt.height_km * 100.0).round() / 100.0,
+                        t: (pt.t * 100.0).round() / 100.0,
+                        lat: (pt.lat_deg * 10000.0).round() / 10000.0,
+                        lon: (pt.lon_deg * 10000.0).round() / 10000.0,
+                        range: ((total_range + pt.ground_range_km) * 10.0).round() / 10.0,
+                    });
+                }
+
+                if result.returned_to_ground {
+                    hops_completed += 1;
+                    total_range += result.ground_range_km;
+                    returned = true;
+
                     if let Some(last_pt) = result.points.last() {
-                        cur_lat = last_pt.lat_deg;
+                        total_absorption += last_pt.absorption;
+                    }
+
+                    if _hop < config.max_hops - 1 {
+                        if let Some(last_pt) = result.points.last() {
+                            cur_lat = last_pt.lat_deg;
+                        }
+                    } else {
+                        break;
                     }
                 } else {
                     break;
                 }
-            } else {
-                break;
             }
-        }
 
-        Some(FanRay {
-            elev: (elev * 10.0).round() / 10.0,
-            max_h: (max_h * 100.0).round() / 100.0,
-            ground: returned,
-            range_km: (total_range * 10.0).round() / 10.0,
-            hops: hops_completed,
-            absorption: (total_absorption * 10000.0).round() / 10000.0,
-            pts: all_pts,
+            Some(FanRay {
+                elev: (elev * 10.0).round() / 10.0,
+                max_h: (max_h * 100.0).round() / 100.0,
+                ground: returned,
+                range_km: (total_range * 10.0).round() / 10.0,
+                hops: hops_completed,
+                absorption: (total_absorption * 10000.0).round() / 10000.0,
+                pts: all_pts,
+            })
         })
-    }).collect();
+        .collect();
 
     Ok(FanTraceResult {
         n_rays: rays.len(),

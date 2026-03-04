@@ -1,13 +1,13 @@
 //! Export utilities for formatting trace results into standard formats
 //! like CSV and JSON.
 
+use crate::fan::{FanRayPoint, FanTraceResult};
 use crate::tracer::TraceResult;
-use crate::fan::{FanTraceResult, FanRayPoint};
 use serde::Serialize;
 use std::error::Error;
 
 /// Formats a TraceResult into a CSV string.
-/// 
+///
 /// The resulting CSV contains all points along the ray path.
 pub fn export_trace_csv(result: &TraceResult) -> Result<String, Box<dyn Error>> {
     let mut wtr = csv::Writer::from_writer(vec![]);
@@ -58,7 +58,7 @@ pub fn export_json<T: Serialize>(result: &T) -> Result<String, Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tracer::{TracePoint, TraceConfig};
+    use crate::tracer::{TraceConfig, TracePoint};
 
     #[test]
     fn test_export_trace_csv() {
@@ -84,7 +84,12 @@ mod tests {
         let csv_str = export_trace_csv(&result).unwrap();
         assert!(csv_str.contains("step"));
         assert!(csv_str.contains("height_km"));
-        assert!(csv_str.contains("1,0.1,50.0,40.0,-80.0,10.0,15.0,14.0,0.5") || csv_str.contains("1,0.1,50,40,-80,10,15,14,0.5"), "Actual CSV: {}", csv_str);
+        assert!(
+            csv_str.contains("1,0.1,50.0,40.0,-80.0,10.0,15.0,14.0,0.5")
+                || csv_str.contains("1,0.1,50,40,-80,10,15,14,0.5"),
+            "Actual CSV: {}",
+            csv_str
+        );
     }
 
     #[test]

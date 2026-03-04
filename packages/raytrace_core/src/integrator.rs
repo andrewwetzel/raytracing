@@ -1,7 +1,9 @@
 //! RK4 / Adams-Moulton integrator (internal).
+#![allow(clippy::needless_range_loop)]
+#![allow(clippy::too_many_arguments)]
 
-use crate::params::ModelParams;
 use crate::hamiltonian::hamltn;
+use crate::params::ModelParams;
 
 pub(crate) const NN: usize = 8;
 
@@ -26,8 +28,17 @@ pub(crate) struct IntegratorState {
 }
 
 impl IntegratorState {
-    pub fn new(y0: &[f64; NN], t0: f64, step: f64, mode: usize,
-           e1max: f64, e1min: f64, e2max: f64, e2min: f64, fact: f64) -> Self {
+    pub fn new(
+        y0: &[f64; NN],
+        t0: f64,
+        step: f64,
+        mode: usize,
+        e1max: f64,
+        e1min: f64,
+        e2max: f64,
+        e2min: f64,
+        fact: f64,
+    ) -> Self {
         let mut s = Self {
             y: *y0,
             dydt: [0.0; NN],
@@ -47,19 +58,16 @@ impl IntegratorState {
             e2min,
             fact: if fact <= 0.0 { 0.5 } else { fact },
         };
-        if mode == 1 { s.mm = 4; }
-        s.xv[s.mm] = t0;
-        for i in 0..NN {
-            s.yu[s.mm][i] = y0[i];
+        if mode == 1 {
+            s.mm = 4;
         }
+        s.xv[s.mm] = t0;
+        s.yu[s.mm] = *y0;
         s
     }
 }
 
-pub(crate) fn rk4_step(
-    s: &mut IntegratorState,
-    freq_mhz: f64, ray_mode: f64, p: &ModelParams,
-) {
+pub(crate) fn rk4_step(s: &mut IntegratorState, freq_mhz: f64, ray_mode: f64, p: &ModelParams) {
     let bet = [0.5, 0.5, 1.0, 0.0];
     let mut dely = [[0.0f64; NN]; 4];
     let mm = s.mm;
@@ -72,9 +80,7 @@ pub(crate) fn rk4_step(
         s.t = bet[k] * s.step + s.xv[mm];
         let (d, _, _, _, _) = hamltn(&s.y, freq_mhz, ray_mode, p, false);
         s.dydt = d;
-        for i in 0..NN {
-            s.fv[mm][i] = d[i];
-        }
+        s.fv[mm] = d;
     }
 
     for i in 0..NN {
@@ -83,7 +89,7 @@ pub(crate) fn rk4_step(
     }
     s.mm += 1;
     s.xv[s.mm] = s.xv[s.mm - 1] + s.step;
-    for i in 0..NN { s.y[i] = s.yu[s.mm][i]; }
+    s.y = s.yu[s.mm];
     s.t = s.xv[s.mm];
 
     let (d, _, _, _, _) = hamltn(&s.y, freq_mhz, ray_mode, p, false);
@@ -94,7 +100,7 @@ pub(crate) fn rk4_step(
         return;
     }
 
-    for i in 0..NN { s.fv[s.mm][i] = d[i]; }
+    s.fv[s.mm] = d;
 
     if s.mm <= 3 {
         rk4_step(s, freq_mhz, ray_mode, p);
@@ -104,16 +110,14 @@ pub(crate) fn rk4_step(
     am_step(s, freq_mhz, ray_mode, p);
 }
 
-pub(crate) fn am_step(
-    s: &mut IntegratorState,
-    freq_mhz: f64, ray_mode: f64, p: &ModelParams,
-) {
+pub(crate) fn am_step(s: &mut IntegratorState, freq_mhz: f64, ray_mode: f64, p: &ModelParams) {
     let mut dely1 = [0.0f64; NN];
 
     // Predictor (Adams-Bashforth)
     for i in 0..NN {
-        let delta = s.step * (55.0 * s.fv[4][i] - 59.0 * s.fv[3][i]
-            + 37.0 * s.fv[2][i] - 9.0 * s.fv[1][i]) / 24.0;
+        let delta = s.step
+            * (55.0 * s.fv[4][i] - 59.0 * s.fv[3][i] + 37.0 * s.fv[2][i] - 9.0 * s.fv[1][i])
+            / 24.0;
         s.y[i] = s.yu[4][i] + delta;
         dely1[i] = s.y[i];
     }
@@ -125,8 +129,8 @@ pub(crate) fn am_step(
 
     // Corrector (Adams-Moulton)
     for i in 0..NN {
-        let delta = s.step * (9.0 * d[i] + 19.0 * s.fv[4][i]
-            - 5.0 * s.fv[3][i] + s.fv[2][i]) / 24.0;
+        let delta =
+            s.step * (9.0 * d[i] + 19.0 * s.fv[4][i] - 5.0 * s.fv[3][i] + s.fv[2][i]) / 24.0;
         s.yu[5][i] = s.yu[4][i] + delta;
         s.y[i] = s.yu[5][i];
     }
@@ -146,7 +150,9 @@ pub(crate) fn am_step(
         if s.y[i].abs() > 1.0e-8 {
             epsil /= s.y[i].abs();
         }
-        if sse < epsil { sse = epsil; }
+        if sse < epsil {
+            sse = epsil;
+        }
     }
 
     if s.e1max <= sse {
@@ -158,10 +164,8 @@ pub(crate) fn am_step(
         s.mm = 1;
         s.step *= s.fact;
         // Reinit from current y
-        for i in 0..NN {
-            s.yu[1][i] = s.y[i];
-            s.fv[1][i] = s.dydt[i];
-        }
+        s.yu[1] = s.y;
+        s.fv[1] = s.dydt;
         s.xv[1] = s.t;
         rk4_step(s, freq_mhz, ray_mode, p);
         return;
@@ -177,12 +181,10 @@ pub(crate) fn am_step(
     s.mm = 3;
     s.xv[2] = s.xv[3];
     s.xv[3] = s.xv[5];
-    for i in 0..NN {
-        s.fv[2][i] = s.fv[3][i];
-        s.fv[3][i] = s.dydt[i];
-        s.yu[2][i] = s.yu[3][i];
-        s.yu[3][i] = s.yu[5][i];
-    }
+    s.fv[2] = s.fv[3];
+    s.fv[3] = s.dydt;
+    s.yu[2] = s.yu[3];
+    s.yu[3] = s.yu[5];
     s.step *= 2.0;
     rk4_step(s, freq_mhz, ray_mode, p);
 }
@@ -193,18 +195,16 @@ fn exit_routine(s: &mut IntegratorState) {
 
     for k in 1..4 {
         s.xv[k] = s.xv[k + 1];
-        for i in 0..NN {
-            s.fv[k][i] = s.fv[k + 1][i];
-            s.yu[k][i] = s.yu[k + 1][i];
-        }
+        s.fv[k] = s.fv[k + 1];
+        s.yu[k] = s.yu[k + 1];
     }
     s.xv[4] = s.xv[5];
-    for i in 0..NN {
-        s.fv[4][i] = s.dydt[i];
-        s.yu[4][i] = s.yu[5][i];
-    }
+    s.fv[4] = s.dydt;
+    s.yu[4] = s.yu[5];
 
-    if s.mode <= 2 { return; }
+    if s.mode <= 2 {
+        return;
+    }
     let e = (s.xv[4] - s.alpha).abs();
     s.epm = s.epm.max(e);
 }
@@ -214,11 +214,7 @@ mod tests {
     use super::*;
     use crate::params::*;
     // Tests for the RK4/Adams-Moulton integrator
-    
-    
-    
-    
-    
+
     fn init_state() -> (IntegratorState, ModelParams) {
         let p = ModelParams::default();
         let elev = 20.0_f64.to_radians();
@@ -229,14 +225,16 @@ mod tests {
         let kph0 = elev.cos() * (std::f64::consts::PI - az).sin();
         let mut y = [EARTH_RADIUS, theta0, 0.0, kr0, kth0, kph0, 0.0, 0.0];
         let (_, _, nkr, nkth, nkph) = hamltn(&y, 10.0, -1.0, &p, true);
-        y[3] = nkr; y[4] = nkth; y[5] = nkph;
+        y[3] = nkr;
+        y[4] = nkth;
+        y[5] = nkph;
         let mut state = IntegratorState::new(&y, 0.0, 10.0, 2, 1e-4, 2e-6, 100.0, 1e-8, 0.5);
         let (d, _, _, _, _) = hamltn(&state.y, 10.0, -1.0, &p, false);
         state.dydt = d;
-        for i in 0..NN { state.fv[state.mm][i] = d[i]; }
+        state.fv[state.mm] = d;
         (state, p)
     }
-    
+
     #[test]
     fn test_rk4_step_advances() {
         let (mut s, p) = init_state();
@@ -249,7 +247,7 @@ mod tests {
             assert!(yi.is_finite(), "y[{}] not finite: {}", i, yi);
         }
     }
-    
+
     #[test]
     fn test_multiple_steps_finite() {
         let (mut s, p) = init_state();
@@ -261,7 +259,7 @@ mod tests {
         }
         assert!(s.y[0] - EARTH_RADIUS > 0.0);
     }
-    
+
     #[test]
     fn test_am_step_after_warmup() {
         let (mut s, p) = init_state();
@@ -269,5 +267,4 @@ mod tests {
         assert_eq!(s.mm, 4, "mm should be 4 after warmup");
         assert!(s.t > 0.0);
     }
-    
 }

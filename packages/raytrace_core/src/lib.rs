@@ -36,26 +36,26 @@
 //! ```
 
 #[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
+use serde::{Deserialize, Serialize};
 #[cfg(target_arch = "wasm32")]
-use serde::{Serialize, Deserialize};
+use wasm_bindgen::prelude::*;
 
-pub mod params;
-pub mod error;
 pub(crate) mod complex;
-pub mod models;
+pub mod error;
+pub mod export;
+pub mod fan;
 pub(crate) mod hamiltonian;
 pub(crate) mod integrator;
+pub mod models;
+pub mod params;
 pub mod tracer;
-pub mod fan;
-pub mod export;
 
 // Public re-exports for ergonomic API
-pub use export::{export_trace_csv, export_fan_trace_csv, export_json};
-pub use fan::{FanTraceConfig, FanTraceResult, FanRay, FanRayPoint};
-pub use params::ModelParams;
 pub use error::TraceError;
-pub use tracer::{TraceConfig, TraceResult, TracePoint};
+pub use export::{export_fan_trace_csv, export_json, export_trace_csv};
+pub use fan::{FanRay, FanRayPoint, FanTraceConfig, FanTraceResult};
+pub use params::ModelParams;
+pub use tracer::{TraceConfig, TracePoint, TraceResult};
 
 #[cfg(target_arch = "wasm32")]
 use params::*;
@@ -89,8 +89,6 @@ struct FanTraceRequest {
     rindex_model: Option<u8>,
     pert_model: Option<u8>,
 }
-
-
 
 /// Fan trace response
 #[cfg(target_arch = "wasm32")]
@@ -160,7 +158,8 @@ pub fn trace_fan_wasm(request_json: &str) -> String {
             return serde_json::to_string(&serde_json::json!({
                 "error": format!("Invalid request: {}", e),
                 "rays": []
-            })).unwrap_or_default();
+            }))
+            .unwrap_or_default();
         }
     };
 
@@ -186,20 +185,38 @@ pub fn trace_fan_wasm(request_json: &str) -> String {
         mag_model,
         col_model: CollisionModel::default(),
         rindex_model,
-        fc, hm, sh,
+        fc,
+        hm,
+        sh,
         alpha: 0.5,
-        ed_a: 0.0, ed_b: 0.0, ed_c: 0.0, ed_e: 0.0,
+        ed_a: 0.0,
+        ed_b: 0.0,
+        ed_c: 0.0,
+        ed_e: 0.0,
         ym: 100.0,
-        fc2: 0.0, hm2: 0.0, sh2: 0.0,
+        fc2: 0.0,
+        hm2: 0.0,
+        sh2: 0.0,
         chi: 3.0,
         fh,
         dip: 0.0,
         epoch_year: 2025.0,
-        nu1: 1_050_000.0, h1: 100.0, a1: 0.148,
-        nu2: 30.0, h2: 140.0, a2: 0.0183,
+        nu1: 1_050_000.0,
+        h1: 100.0,
+        a1: 0.148,
+        nu2: 30.0,
+        h2: 140.0,
+        a2: 0.0183,
         pert_model,
-        p1: 0.0, p2: 0.0, p3: 0.0, p4: 0.0, p5: 0.0,
-        p6: 0.0, p7: 0.0, p8: 0.0, p9: 0.0,
+        p1: 0.0,
+        p2: 0.0,
+        p3: 0.0,
+        p4: 0.0,
+        p5: 0.0,
+        p6: 0.0,
+        p7: 0.0,
+        p8: 0.0,
+        p9: 0.0,
     };
 
     let fan_config = fan::FanTraceConfig {

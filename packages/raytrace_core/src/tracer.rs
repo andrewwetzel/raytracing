@@ -1,12 +1,11 @@
 //! Ray tracing execution and result types.
 
 use std::f64::consts::PI;
-use serde::Serialize;
 
-use crate::params::*;
+use crate::error::TraceError;
 use crate::hamiltonian::hamltn;
 use crate::integrator::*;
-use crate::error::TraceError;
+use crate::params::*;
 
 /// A point along the ray path.
 #[non_exhaustive]
@@ -63,7 +62,7 @@ pub struct TraceResult {
 /// };
 /// let result = config.trace();
 /// println!("Max height: {:.2} km", result.max_height);
-/// ```ignore
+/// ```
 ///
 /// # Stability
 ///
@@ -153,19 +152,34 @@ impl TraceConfig {
 /// Prefer [`TraceConfig::trace`] for the public API.
 #[doc(hidden)]
 #[tracing::instrument(skip(p), level = "debug")]
+#[allow(clippy::too_many_arguments)]
 pub fn trace_ray(
-    freq_mhz: f64, ray_mode: f64,
-    elevation_deg: f64, azimuth_deg: f64,
+    freq_mhz: f64,
+    ray_mode: f64,
+    elevation_deg: f64,
+    azimuth_deg: f64,
     tx_lat_deg: f64,
-    int_mode: usize, step_size: f64, max_steps: usize,
-    e1max: f64, e1min: f64, e2max: f64,
+    int_mode: usize,
+    step_size: f64,
+    max_steps: usize,
+    e1max: f64,
+    e1min: f64,
+    e2max: f64,
     p: &ModelParams,
     print_every: usize,
 ) -> Result<TraceResult, TraceError> {
-    if freq_mhz <= 0.0 { return Err(TraceError::InvalidFrequency(freq_mhz)); }
-    if elevation_deg < -90.0 || elevation_deg > 90.0 { return Err(TraceError::InvalidElevation(elevation_deg)); }
-    if step_size <= 0.0 { return Err(TraceError::InvalidStepSize(step_size)); }
-    if max_steps == 0 { return Err(TraceError::InvalidMaxSteps(max_steps)); }
+    if freq_mhz <= 0.0 {
+        return Err(TraceError::InvalidFrequency(freq_mhz));
+    }
+    if !(-90.0..=90.0).contains(&elevation_deg) {
+        return Err(TraceError::InvalidElevation(elevation_deg));
+    }
+    if step_size <= 0.0 {
+        return Err(TraceError::InvalidStepSize(step_size));
+    }
+    if max_steps == 0 {
+        return Err(TraceError::InvalidMaxSteps(max_steps));
+    }
 
     let elev_rad = elevation_deg * PI / 180.0;
     let az_rad = azimuth_deg * PI / 180.0;
@@ -195,16 +209,13 @@ pub fn trace_ray(
 
     // Init integrator
     let mut state = IntegratorState::new(
-        &y, 0.0, step_size, int_mode,
-        e1max, e1min, e2max, 1.0e-8, 0.5,
+        &y, 0.0, step_size, int_mode, e1max, e1min, e2max, 1.0e-8, 0.5,
     );
 
     // Store initial derivatives
     let (d_init, _, _, _, _) = hamltn(&state.y, freq_mhz, ray_mode, p, false);
     state.dydt = d_init;
-    for i in 0..NN {
-        state.fv[state.mm][i] = d_init[i];
-    }
+    state.fv[state.mm] = d_init;
 
     let mut result = TraceResult {
         points: Vec::with_capacity(max_steps / print_every + 5),
@@ -215,10 +226,15 @@ pub fn trace_ray(
     };
 
     result.points.push(TracePoint {
-        step: 0, t: 0.0, height_km: 0.0,
-        lat_deg: tx_lat_deg, lon_deg: 0.0,
-        ground_range_km: 0.0, group_path: 0.0,
-        phase_path: 0.0, absorption: 0.0,
+        step: 0,
+        t: 0.0,
+        height_km: 0.0,
+        lat_deg: tx_lat_deg,
+        lon_deg: 0.0,
+        ground_range_km: 0.0,
+        group_path: 0.0,
+        phase_path: 0.0,
+        absorption: 0.0,
     });
 
     let mut went_up = false;
@@ -232,13 +248,19 @@ pub fn trace_ray(
         }
 
         let h = state.y[0] - p.earth_r;
-        if h > result.max_height { result.max_height = h; }
-        if h > 10.0 { went_up = true; }
-        if h.is_nan() || h.abs() > 50000.0 { break; }
+        if h > result.max_height {
+            result.max_height = h;
+        }
+        if h > 10.0 {
+            went_up = true;
+        }
+        if h.is_nan() || h.abs() > 50000.0 {
+            break;
+        }
 
         let ground = went_up && h < 0.0;
-        if ground && !result.returned_to_ground { 
-            result.returned_to_ground = true; 
+        if ground && !result.returned_to_ground {
+            result.returned_to_ground = true;
             tracing::debug!(step = step_num, final_height = h, "Ray returned to ground");
         }
 
@@ -267,7 +289,9 @@ pub fn trace_ray(
         }
 
         result.n_steps = step_num;
-        if ground { break; }
+        if ground {
+            break;
+        }
     }
 
     Ok(result)
