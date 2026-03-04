@@ -138,36 +138,56 @@ export function updateGlobeRays(traceGroups, txLatDeg, txLonDeg, rxLatDeg, rxLon
     // RX marker if destination is set
     if (rxLatDeg != null && rxLonDeg != null && !isNaN(rxLatDeg) && !isNaN(rxLonDeg)) {
         createRxMarker(rxLatDeg, rxLonDeg);
-        if (!traceGroups || traceGroups.length === 0) {
-            createDirectionArc(txLat, txLon, rxLatDeg, rxLonDeg);
-        }
+        createDirectionArc(txLat, txLon, rxLatDeg, rxLonDeg);
     }
 
     if (!traceGroups || traceGroups.length === 0) return;
 
     // Draw rays — ray lon values are relative (tracer starts at phi=0),
     // so offset by TX longitude to place on the real globe
+    let renderedCount = 0;
     for (const group of traceGroups) {
         const color = new THREE.Color(group.color || '#60a5fa');
         for (const ray of group.rays) {
-            if (!ray.pts || ray.pts.length < 2) continue;
+            if (!ray || !ray.pts || ray.pts.length < 2) {
+                console.warn("Skipping ray in 3D globe because it lacks coordinate points:", ray);
+                continue;
+            }
             const positions = [];
+            const vecs = [];
             for (const pt of ray.pts) {
                 const pos = latLonAltToVec3(pt.lat, pt.lon + txLon, pt.h);
                 positions.push(pos.x, pos.y, pos.z);
+                vecs.push(pos);
             }
-            const geometry = new THREE.BufferGeometry();
-            geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-            const material = new THREE.LineBasicMaterial({
-                color,
-                transparent: true,
-                opacity: 0.8,
-                linewidth: 1,
-            });
-            const line = new THREE.Line(geometry, material);
-            rayGroup.add(line);
+
+            // Draw a thick glowing tube for the successful Target Bisection ray
+            if (group.color === '#10b981' && vecs.length > 2) {
+                const curve = new THREE.CatmullRomCurve3(vecs);
+                const tubeGeom = new THREE.TubeGeometry(curve, vecs.length, 0.005, 8, false);
+                const tubeMat = new THREE.MeshBasicMaterial({
+                    color: 0x10b981,
+                    transparent: true,
+                    opacity: 0.9,
+                });
+                const tube = new THREE.Mesh(tubeGeom, tubeMat);
+                rayGroup.add(tube);
+            } else {
+                const geometry = new THREE.BufferGeometry();
+                geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+                const material = new THREE.LineBasicMaterial({
+                    color,
+                    transparent: true,
+                    opacity: 0.8,
+                    linewidth: 1,
+                });
+                const line = new THREE.Line(geometry, material);
+                rayGroup.add(line);
+            }
+            renderedCount++;
         }
     }
+    console.log(`Updated 3D Globe with ${renderedCount} total drawn rays. traceGroups:`, traceGroups);
 }
 
 export function setGlobeVisible(visible) {

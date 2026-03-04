@@ -23,6 +23,11 @@ describe('Target Bisection & Globe Interaction E2E Tests', { timeout: 15000 }, (
             console.error('PAGE ERROR:', err.message);
         });
 
+        page.on('console', async msg => {
+            const args = await Promise.all(msg.args().map(arg => arg.jsonValue()));
+            console.log('BROWSER CONSOLE:', msg.text(), ...args);
+        });
+
         const indexPath = `file://${path.resolve(__dirname, '../index.html')}`;
         await page.goto(indexPath, { waitUntil: 'load' });
     });
@@ -80,6 +85,9 @@ describe('Target Bisection & Globe Interaction E2E Tests', { timeout: 15000 }, (
     });
 
     test('Target Bisection runs successfully without hanging', async () => {
+        // Switch to 3D mode to ensure updateGlobeRays runs
+        await page.click('#view-3d-btn');
+
         // Run the target search
         const btnTextBefore = await page.$eval('#target-btn .btn-label', el => el.textContent);
         assert.strictEqual(btnTextBefore, 'Find Path');
