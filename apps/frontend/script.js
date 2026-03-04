@@ -1868,6 +1868,7 @@ async function targetAdvancedSearch() {
     let found = false;
 
     for (let iter = 0; iter < maxIter; iter++) {
+      if (stopTargeting) break;
       const mid = (lo + hi) / 2;
       const body = {
         ...baseConfig,
@@ -2241,12 +2242,27 @@ function wireControls() {
   });
 
   // Globe select buttons
+  let globePickMode = 'tx'; // default
+
   document.getElementById('tx-globe-pick-btn')?.addEventListener('click', () => {
+    globePickMode = 'tx';
+    const hint = document.getElementById('globe-hint');
+    if (hint) {
+      hint.textContent = 'Click anywhere on globe to set TX (Start) location';
+      hint.className = 'globe-hint tx-mode';
+    }
     if (viewMode === '2d') {
       document.getElementById('view-3d-btn')?.click();
     }
   });
+
   document.getElementById('rx-globe-pick-btn')?.addEventListener('click', () => {
+    globePickMode = 'rx';
+    const hint = document.getElementById('globe-hint');
+    if (hint) {
+      hint.textContent = 'Click anywhere on globe to set RX (Target) location';
+      hint.className = 'globe-hint rx-mode';
+    }
     if (viewMode === '2d') {
       document.getElementById('view-3d-btn')?.click();
     }
@@ -2272,9 +2288,9 @@ function wireControls() {
       viewMode = '3d';
       if (!globeInitialized) {
         initGlobe(globeEl);
-        // Wire click-to-pick: clicking on globe updates TX location, Shift+Click updates RX
-        onGlobeClick((lat, lon, event) => {
-          if (event && event.shiftKey) {
+        // Wire click-to-pick: relies on globePickMode state
+        onGlobeClick((lat, lon) => {
+          if (globePickMode === 'rx') {
             setRxLocation(lat, lon);
           } else {
             setTxLocation(lat, lon, `${lat.toFixed(1)}°, ${lon.toFixed(1)}°`, 'located');
@@ -2284,7 +2300,14 @@ function wireControls() {
       }
       canvasEl.style.display = 'none';
       setGlobeVisible(true);
-      document.getElementById('globe-hint').style.display = 'block';
+      const hint = document.getElementById('globe-hint');
+      if (hint) {
+        hint.style.display = 'block';
+        if (!hint.textContent || hint.textContent.includes('Click:')) {
+          hint.textContent = 'Click anywhere on globe to set TX (Start) location';
+          hint.className = 'globe-hint tx-mode';
+        }
+      }
 
       // Push current ray data to 3D
       const txLat = getTxLat();
