@@ -21,7 +21,7 @@ pub const EARTH_RADIUS: f64 = 6370.0;
 ///
 /// Selects how the ionospheric electron density varies with altitude and position.
 #[non_exhaustive]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum ElectronDensityModel {
     /// Chapman layer — classic single-layer profile with analytic gradients.
     #[default]
@@ -42,7 +42,7 @@ pub enum ElectronDensityModel {
 ///
 /// Selects the geomagnetic field model used for magneto-ionic splitting.
 #[non_exhaustive]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum MagneticFieldModel {
     /// Centered dipole — simple but captures essential field geometry.
     #[default]
@@ -59,7 +59,7 @@ pub enum MagneticFieldModel {
 ///
 /// Selects how electron-neutral collision frequency varies with altitude.
 #[non_exhaustive]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum CollisionModel {
     /// Double-exponential (EXPZ2) — two exponential terms for realistic profile.
     #[default]
@@ -74,7 +74,7 @@ pub enum CollisionModel {
 ///
 /// Selects which terms are included in the Appleton-Hartree formula.
 #[non_exhaustive]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum RefractiveIndexModel {
     /// Full Appleton-Hartree — magnetic field + collisions. Most accurate.
     #[default]
@@ -91,7 +91,7 @@ pub enum RefractiveIndexModel {
 ///
 /// Adds a localized density modification on top of the background profile.
 #[non_exhaustive]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum PerturbationModel {
     /// No perturbation — undisturbed ionosphere.
     #[default]
@@ -112,7 +112,7 @@ pub enum PerturbationModel {
 ///
 /// The Earth's magnetic field splits radio waves into two modes.
 #[non_exhaustive]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum RayMode {
     /// Extraordinary (X-mode) — refracts at a higher frequency than O-mode.
     #[default]
@@ -147,8 +147,8 @@ impl RayMode {
 /// to get a standard mid-latitude daytime configuration, then override specific fields:
 ///
 /// ```ignore
-/// use ionotrace::params::ModelParams;
-/// use ionotrace::params::ElectronDensityModel;
+/// use crate::params::ModelParams;
+/// use crate::params::ElectronDensityModel;
 ///
 /// let params = ModelParams {
 ///     ed_model: ElectronDensityModel::DualChapman,
@@ -162,7 +162,8 @@ impl RayMode {
 /// This struct is `#[non_exhaustive]` — new fields may be added in future versions.
 /// Always construct with `..ModelParams::default()` to remain forward-compatible.
 #[non_exhaustive]
-#[derive(Clone, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, derive_builder::Builder)]
+#[builder(default, setter(into))]
 pub struct ModelParams {
     /// Earth radius in km (default: 6370.0).
     pub earth_r: f64,
@@ -259,6 +260,16 @@ pub struct ModelParams {
     pub p8: f64,
     /// Perturbation parameter 9 (model-dependent).
     pub p9: f64,
+}
+
+impl ModelParams {
+    /// Create a new builder for ModelParams, allowing chainable configuration.
+    ///
+    /// The builder is initialized with `ModelParams::default()` values.
+    /// Call `.build().unwrap()` when finished.
+    pub fn builder() -> ModelParamsBuilder {
+        ModelParamsBuilder::default()
+    }
 }
 
 impl Default for ModelParams {

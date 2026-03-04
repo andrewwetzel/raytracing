@@ -10,7 +10,7 @@
 //! use ionotrace::{TraceConfig, ModelParams};
 //!
 //! let config = TraceConfig::new(10.0, 20.0); // 10 MHz, 20° elevation
-//! let result = config.trace();
+//! let result = config.trace().unwrap();
 //!
 //! println!("Max height: {:.2} km", result.max_height);
 //! println!("Ground range: {:.1} km", result.ground_range_km);
@@ -23,7 +23,7 @@
 //!
 //! ```ignore
 //! use ionotrace::{TraceConfig, ModelParams};
-//! use ionotrace::params::{ElectronDensityModel, MagneticFieldModel};
+//! use crate::params::{ElectronDensityModel, MagneticFieldModel};
 //!
 //! let config = TraceConfig {
 //!     params: ModelParams {
@@ -41,14 +41,20 @@ use wasm_bindgen::prelude::*;
 use serde::{Serialize, Deserialize};
 
 pub mod params;
+pub mod error;
 pub(crate) mod complex;
 pub mod models;
 pub(crate) mod hamiltonian;
 pub(crate) mod integrator;
 pub mod tracer;
+pub mod fan;
+pub mod export;
 
 // Public re-exports for ergonomic API
+pub use export::{export_trace_csv, export_fan_trace_csv, export_json};
+pub use fan::{FanTraceConfig, FanTraceResult, FanRay, FanRayPoint};
 pub use params::ModelParams;
+pub use error::TraceError;
 pub use tracer::{TraceConfig, TraceResult, TracePoint};
 
 #[cfg(target_arch = "wasm32")]
@@ -84,29 +90,7 @@ struct FanTraceRequest {
     pert_model: Option<u8>,
 }
 
-/// A single ray result for the frontend
-#[cfg(target_arch = "wasm32")]
-#[derive(Serialize)]
-struct FanRay {
-    elev: f64,
-    max_h: f64,
-    ground: bool,
-    range_km: f64,
-    hops: u8,
-    absorption: f64,
-    pts: Vec<FanRayPoint>,
-}
 
-/// A point in a fan ray for the frontend
-#[cfg(target_arch = "wasm32")]
-#[derive(Serialize)]
-struct FanRayPoint {
-    h: f64,
-    t: f64,
-    lat: f64,
-    lon: f64,
-    range: f64,
-}
 
 /// Fan trace response
 #[cfg(target_arch = "wasm32")]
@@ -218,86 +202,30 @@ pub fn trace_fan_wasm(request_json: &str) -> String {
         p6: 0.0, p7: 0.0, p8: 0.0, p9: 0.0,
     };
 
-    let mut rays = Vec::new();
-    let mut elev = req.elev_min;
-    while elev <= req.elev_max + 0.01 {
-        let mut all_pts: Vec<FanRayPoint> = Vec::new();
-        let mut total_range = 0.0f64;
-        let mut max_h = 0.0f64;
-        let mut _total_steps = 0usize;
-        let mut returned = false;
-        let mut hops_completed: u8 = 0;
-        let mut total_absorption = 0.0f64;
+    let fan_config = fan::FanTraceConfig {
+        freq_mhz: req.freq_mhz,
+        ray_mode: req.ray_mode,
+        elev_min: req.elev_min,
+        elev_max: req.elev_max,
+        elev_step: req.elev_step,
+        azimuth_deg,
+        tx_lat_deg,
+        step_size,
+        max_steps,
+        max_hops,
+        params,
+    };
 
-        // Current hop parameters
-        let cur_elev = elev;
-        let mut cur_lat = tx_lat_deg;
-        let cur_az = azimuth_deg;
-
-        for _hop in 0..max_hops {
-            let result = trace_ray(
-                req.freq_mhz, req.ray_mode,
-                cur_elev, cur_az, cur_lat,
-                2, step_size, max_steps,
-                1e-4, 2e-6, 100.0,
-                &params, 1,
-            );
-
-            if result.max_height > max_h { max_h = result.max_height; }
-            _total_steps += result.n_steps;
-
-            // Add points with range offset
-            for pt in &result.points {
-                all_pts.push(FanRayPoint {
-                    h: (pt.height_km * 100.0).round() / 100.0,
-                    t: (pt.t * 100.0).round() / 100.0,
-                    lat: (pt.lat_deg * 10000.0).round() / 10000.0,
-                    lon: (pt.lon_deg * 10000.0).round() / 10000.0,
-                    range: ((total_range + pt.ground_range_km) * 10.0).round() / 10.0,
-                });
-            }
-
-            if result.returned_to_ground {
-                hops_completed += 1;
-                total_range += result.ground_range_km;
-                returned = true;
-                // Accumulate absorption from last point
-                if let Some(last_pt) = result.points.last() {
-                    total_absorption += last_pt.absorption;
-                }
-
-                // If more hops remain, compute reflected state
-                if _hop < max_hops - 1 {
-                    if let Some(last_pt) = result.points.last() {
-                        cur_lat = last_pt.lat_deg;
-                    }
-                } else {
-                    break;
-                }
-            } else {
-                break;
-            }
-        }
-
-        rays.push(FanRay {
-            elev: (elev * 10.0).round() / 10.0,
-            max_h: (max_h * 100.0).round() / 100.0,
-            ground: returned,
-            range_km: (total_range * 10.0).round() / 10.0,
-            hops: hops_completed,
-            absorption: (total_absorption * 10000.0).round() / 10000.0,
-            pts: all_pts,
-        });
-
-        elev += req.elev_step;
-    }
+    let result = fan::fan_trace(&fan_config).unwrap_or(fan::FanTraceResult {
+        n_rays: 0,
+        rays: Vec::new(),
+    });
 
     let elapsed = js_sys::Date::now() - start;
-    let n_rays = rays.len();
 
     let response = FanTraceResponse {
-        rays,
-        n_rays,
+        rays: result.rays,
+        n_rays: result.n_rays,
         elapsed_ms: (elapsed * 100.0).round() / 100.0,
         freq_mhz: req.freq_mhz,
         fc,

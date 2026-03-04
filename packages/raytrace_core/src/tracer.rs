@@ -6,10 +6,11 @@ use serde::Serialize;
 use crate::params::*;
 use crate::hamiltonian::hamltn;
 use crate::integrator::*;
+use crate::error::TraceError;
 
 /// A point along the ray path.
 #[non_exhaustive]
-#[derive(Serialize, Clone, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct TracePoint {
     /// Integration step number.
     pub step: usize,
@@ -33,7 +34,7 @@ pub struct TracePoint {
 
 /// Result of tracing a single ray through the ionosphere.
 #[non_exhaustive]
-#[derive(Serialize, Clone, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct TraceResult {
     /// Ray path points (sampled every `print_every` steps + ground return).
     pub points: Vec<TracePoint>,
@@ -53,7 +54,7 @@ pub struct TraceResult {
 ///
 /// ```ignore
 /// use ionotrace::{TraceConfig, ModelParams};
-/// use ionotrace::params::RayMode;
+/// use crate::params::RayMode;
 ///
 /// let config = TraceConfig {
 ///     ray_mode: RayMode::Ordinary,
@@ -69,7 +70,7 @@ pub struct TraceResult {
 /// This struct is `#[non_exhaustive]` — always construct with `..TraceConfig::new()`
 /// to remain forward-compatible.
 #[non_exhaustive]
-#[derive(Clone, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct TraceConfig {
     /// Radio wave frequency in MHz.
     pub freq_mhz: f64,
@@ -126,8 +127,9 @@ impl TraceConfig {
 
     /// Trace a ray through the ionosphere using this configuration.
     ///
-    /// Returns a [`TraceResult`] containing the ray path and summary statistics.
-    pub fn trace(&self) -> TraceResult {
+    /// Returns a [`TraceResult`] containing the ray path and summary statistics,
+    /// or a [`TraceError`] if the configuration is invalid.
+    pub fn trace(&self) -> Result<TraceResult, TraceError> {
         trace_ray(
             self.freq_mhz,
             self.ray_mode.to_sign(),
@@ -150,6 +152,7 @@ impl TraceConfig {
 ///
 /// Prefer [`TraceConfig::trace`] for the public API.
 #[doc(hidden)]
+#[tracing::instrument(skip(p), level = "debug")]
 pub fn trace_ray(
     freq_mhz: f64, ray_mode: f64,
     elevation_deg: f64, azimuth_deg: f64,
@@ -158,7 +161,12 @@ pub fn trace_ray(
     e1max: f64, e1min: f64, e2max: f64,
     p: &ModelParams,
     print_every: usize,
-) -> TraceResult {
+) -> Result<TraceResult, TraceError> {
+    if freq_mhz <= 0.0 { return Err(TraceError::InvalidFrequency(freq_mhz)); }
+    if elevation_deg < -90.0 || elevation_deg > 90.0 { return Err(TraceError::InvalidElevation(elevation_deg)); }
+    if step_size <= 0.0 { return Err(TraceError::InvalidStepSize(step_size)); }
+    if max_steps == 0 { return Err(TraceError::InvalidMaxSteps(max_steps)); }
+
     let elev_rad = elevation_deg * PI / 180.0;
     let az_rad = azimuth_deg * PI / 180.0;
 
@@ -229,7 +237,10 @@ pub fn trace_ray(
         if h.is_nan() || h.abs() > 50000.0 { break; }
 
         let ground = went_up && h < 0.0;
-        if ground { result.returned_to_ground = true; }
+        if ground && !result.returned_to_ground { 
+            result.returned_to_ground = true; 
+            tracing::debug!(step = step_num, final_height = h, "Ray returned to ground");
+        }
 
         if step_num % print_every == 0 || ground {
             let theta = state.y[1];
@@ -259,5 +270,5 @@ pub fn trace_ray(
         if ground { break; }
     }
 
-    result
+    Ok(result)
 }
