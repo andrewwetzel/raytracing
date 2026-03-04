@@ -171,7 +171,7 @@ export function updateGlobeRays(traceGroups, txLatDeg, txLonDeg, rxLatDeg, rxLon
             // Draw a thick glowing tube for the successful Target Bisection ray
             if (group.color === '#10b981' && vecs.length > 2) {
                 const curve = new THREE.CatmullRomCurve3(vecs);
-                const tubeGeom = new THREE.TubeGeometry(curve, vecs.length, 0.005, 8, false);
+                const tubeGeom = new THREE.TubeGeometry(curve, vecs.length, 0.002, 4, false);
                 const tubeMat = new THREE.MeshBasicMaterial({
                     color: 0x10b981,
                     transparent: true,
