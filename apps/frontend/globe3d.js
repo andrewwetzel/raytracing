@@ -14,6 +14,7 @@ let gridGroup;
 let rayGroup; // Group holding all ray line objects
 let txMarker;
 let rxMarker;
+let arcGroup;
 let animFrameId;
 let raycaster, mouse;
 let clickCallback = null; // callback for click-to-pick
@@ -121,6 +122,12 @@ export function updateGlobeRays(traceGroups, txLatDeg, txLonDeg, rxLatDeg, rxLon
         rxMarker = null;
     }
 
+    // Remove old direction arc
+    if (arcGroup) {
+        scene.remove(arcGroup);
+        arcGroup = null;
+    }
+
     // Get TX lat/lon
     const txLat = txLatDeg ?? 40;
     const txLon = txLonDeg ?? 0;
@@ -131,6 +138,7 @@ export function updateGlobeRays(traceGroups, txLatDeg, txLonDeg, rxLatDeg, rxLon
     // RX marker if destination is set
     if (rxLatDeg != null && rxLonDeg != null && !isNaN(rxLatDeg) && !isNaN(rxLonDeg)) {
         createRxMarker(rxLatDeg, rxLonDeg);
+        createDirectionArc(txLat, txLon, rxLatDeg, rxLonDeg);
     }
 
     if (!traceGroups || traceGroups.length === 0) return;
@@ -473,6 +481,87 @@ function createRxMarker(latDeg, lonDeg) {
     rxMarker.add(pulseRing);
 
     scene.add(rxMarker);
+}
+
+function createDirectionArc(txLat, txLon, rxLat, rxLon) {
+    arcGroup = new THREE.Group();
+
+    // 1. Calculate points along the great circle path
+    const numPoints = 64;
+    const points = [];
+
+    // Convert to radians for math
+    const lat1 = THREE.MathUtils.degToRad(txLat);
+    const lon1 = THREE.MathUtils.degToRad(txLon);
+    const lat2 = THREE.MathUtils.degToRad(rxLat);
+    const lon2 = THREE.MathUtils.degToRad(rxLon);
+
+    // Haversine distance for great circle length
+    const sl = Math.sin((lat2 - lat1) / 2);
+    const sd = Math.sin((lon2 - lon1) / 2);
+    const a = sl * sl + Math.cos(lat1) * Math.cos(lat2) * sd * sd;
+    const distanceRad = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    if (distanceRad < 0.001) return; // Too close to draw meaningful arc
+
+    const maxAltitudeKm = Math.max(50, 400 * Math.sin(Math.min(distanceRad, Math.PI))); // Scaling arch relative to physical distance
+
+    for (let i = 0; i <= numPoints; i++) {
+        const f = i / numPoints;
+        const A = Math.sin((1 - f) * distanceRad) / Math.sin(distanceRad);
+        const B = Math.sin(f * distanceRad) / Math.sin(distanceRad);
+
+        const x = A * Math.cos(lat1) * Math.cos(lon1) + B * Math.cos(lat2) * Math.cos(lon2);
+        const y = A * Math.cos(lat1) * Math.sin(lon1) + B * Math.cos(lat2) * Math.sin(lon2);
+        const z = A * Math.sin(lat1) + B * Math.sin(lat2);
+
+        const latRad = Math.atan2(z, Math.sqrt(x * x + y * y));
+        const lonRad = Math.atan2(y, x);
+
+        // Arch altitude: parabolic trajectory mapping over the globe surface
+        const altKm = maxAltitudeKm * (1 - Math.pow(2 * f - 1, 2));
+
+        points.push(latLonAltToVec3(
+            THREE.MathUtils.radToDeg(latRad),
+            THREE.MathUtils.radToDeg(lonRad),
+            altKm
+        ));
+    }
+
+    // 2. Draw dashed line connecting points
+    const arcGeom = new THREE.BufferGeometry().setFromPoints(points);
+    const arcMat = new THREE.LineDashedMaterial({
+        color: 0xf59e0b, // High visibility Amber
+        linewidth: 1,
+        dashSize: 0.02,
+        gapSize: 0.02,
+        transparent: true,
+        opacity: 0.8
+    });
+
+    const line = new THREE.Line(arcGeom, arcMat);
+    line.computeLineDistances(); // Required for material dot-dashing calculation native to ThreeJS
+    arcGroup.add(line);
+
+    // 3. Add directional arrowhead at the 75% mark along the line
+    const arrowIdx = Math.floor(numPoints * 0.75);
+    const p1 = points[arrowIdx - 1];
+    const p2 = points[arrowIdx];
+
+    const dir = new THREE.Vector3().subVectors(p2, p1).normalize();
+    const arrowGeom = new THREE.ConeGeometry(0.015, 0.04, 8);
+    arrowGeom.rotateX(Math.PI / 2); // Cone points up (+Y), rotate to face vector pathing
+
+    const arrowMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b });
+    const arrowMesh = new THREE.Mesh(arrowGeom, arrowMat);
+
+    arrowMesh.position.copy(p2);
+
+    const target = new THREE.Vector3().copy(p2).add(dir);
+    arrowMesh.lookAt(target);
+
+    arcGroup.add(arrowMesh);
+    scene.add(arcGroup);
 }
 
 function onGlobeClickInternal(event) {

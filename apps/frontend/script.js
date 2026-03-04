@@ -2272,11 +2272,11 @@ function wireControls() {
   });
 
   document.getElementById('rx-tx-globe-pick-btn')?.addEventListener('click', () => {
-    globePickMode = 'tx';
+    globePickMode = 'rx';
     const hint = document.getElementById('globe-hint');
     if (hint) {
-      hint.textContent = 'Click anywhere on globe to set TX (Start) location';
-      hint.className = 'globe-hint tx-mode';
+      hint.textContent = 'Click anywhere on globe to set Target (RX) location';
+      hint.className = 'globe-hint rx-mode';
     }
     if (viewMode === '2d') {
       document.getElementById('view-3d-btn')?.click();
