@@ -1574,7 +1574,7 @@ async function targetBisection() {
       render();
       if (viewMode === '3d') updateGlobeRays(traceGroups, getTxLat(), getTxLon(), getRxLat(), getRxLon());
       updateLegend();
-      await new Promise(r => setTimeout(r, 0)); // yield to UI
+      await new Promise(r => setTimeout(r, 10)); // yield to UI
     } catch (err) {
       console.error('Fan sweep error:', err);
     }
@@ -1671,7 +1671,7 @@ async function targetBisection() {
     render();
     if (viewMode === '3d') updateGlobeRays(traceGroups, getTxLat(), getTxLon(), getRxLat(), getRxLon());
     updateLegend();
-    await new Promise(r => setTimeout(r, 0)); // yield to UI
+    await new Promise(r => setTimeout(r, 10)); // yield to UI
 
     // Check convergence
     if (isGround && error <= tolerance) {
@@ -1897,6 +1897,18 @@ async function targetAdvancedSearch() {
         bestRay = ray;
         bestElev = mid;
       }
+
+      // Live drawing of the bisection
+      traceGroups.push({
+        label: `${comboLabel} @ ${mid.toFixed(1)}°`,
+        color: isGround ? '#475569' : '#334155',
+        rays: [ray],
+        config: body,
+      });
+      render();
+      if (viewMode === '3d') updateGlobeRays(traceGroups, getTxLat(), getTxLon(), getRxLat(), getRxLon());
+      updateLegend();
+      await new Promise(r => setTimeout(r, 10)); // yield to UI
 
       if (isGround && error <= tolerance) { found = true; break; }
 
