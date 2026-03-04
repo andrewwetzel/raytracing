@@ -681,8 +681,13 @@
                             <span class="geo-label">My Location (Target)</span>
                         </button>
                         <button id="rx-globe-pick-btn" class="geolocate-btn" title="Select RX location on 3D globe">
+                            <span class="geo-icon">🎯</span>
+                            <span class="geo-label">Set Target on Globe</span>
+                        </button>
+                        <button id="rx-tx-globe-pick-btn" class="geolocate-btn"
+                            title="Select TX (Start) location on 3D globe">
                             <span class="geo-icon">🌍</span>
-                            <span class="geo-label">Select on Globe</span>
+                            <span class="geo-label">Set Start on Globe</span>
                         </button>
                         <button id="rx-clear-btn" class="geolocate-btn" title="Clear RX Target">
                             <span class="geo-label">Clear</span>
@@ -728,6 +733,15 @@
                                     checked><span>X-mode</span></label>
                             <label class="chip"><input type="checkbox" name="ray-mode"
                                     value="1"><span>O-mode</span></label>
+                        </div>
+                    </label>
+                    <label>
+                        <div class="compact-slider-header">
+                            <span>Azimuth (°)</span>
+                        </div>
+                        <div class="compact-slider" id="azimuth-single">
+                            <input type="range" id="azimuth" min="0" max="360" step="1" value="0">
+                            <output id="azimuth-val">0</output>
                         </div>
                     </label>
                 </div>

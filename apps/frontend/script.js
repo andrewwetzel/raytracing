@@ -2268,6 +2268,18 @@ function wireControls() {
     }
   });
 
+  document.getElementById('rx-tx-globe-pick-btn')?.addEventListener('click', () => {
+    globePickMode = 'tx';
+    const hint = document.getElementById('globe-hint');
+    if (hint) {
+      hint.textContent = 'Click anywhere on globe to set TX (Start) location';
+      hint.className = 'globe-hint tx-mode';
+    }
+    if (viewMode === '2d') {
+      document.getElementById('view-3d-btn')?.click();
+    }
+  });
+
   // Azimuth slider output sync
   const azSlider = document.getElementById('azimuth');
   const azOutput = document.getElementById('azimuth-val');
