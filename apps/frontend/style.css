@@ -466,7 +466,7 @@ body {
 
 .target-log-row {
     display: grid;
-    grid-template-columns: 24px 1fr 1fr 1fr;
+    grid-template-columns: 30px 1fr 1fr 1fr 1fr;
     gap: 4px;
     padding: 3px 10px;
     border-bottom: 1px solid rgba(99, 102, 241, 0.06);

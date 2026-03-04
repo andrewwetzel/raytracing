@@ -23,30 +23,39 @@ Compiles to **WebAssembly** for in-browser use, or runs natively as a Rust libra
 ## Usage (Rust)
 
 ```rust
-use ionotrace::params::ModelParams;
-use ionotrace::tracer::trace_ray;
+use ionotrace::{TraceConfig, ModelParams, fan_trace, FanTraceConfig};
+use ionotrace::params::{ElectronDensityModel, RayMode, MagneticFieldModel};
 
-let params = ModelParams::default(); // Chapman + Dipole + AHWFWC
-
-let result = trace_ray(
-    10.0,   // freq_mhz
-    -1.0,   // ray_mode (-1 = X-mode, +1 = O-mode)
-    20.0,   // elevation_deg
-    0.0,    // azimuth_deg
-    40.0,   // tx_lat_deg
-    2,      // int_mode (1=RK4, 2=RK4+AM, 3=RK4+AM+error)
-    5.0,    // step_size
-    500,    // max_steps
-    1e-4,   // e1max (error tolerance)
-    2e-6,   // e1min
-    100.0,  // e2max
-    &params,
-    1,      // print_every
-);
-
+// Simple Single Ray: 10 MHz, 20° elevation, all defaults
+let result = TraceConfig::new(10.0, 20.0).trace().unwrap();
 println!("Max height: {:.2} km", result.max_height);
-println!("Ground range: {:.1} km", result.ground_range_km);
-println!("Returned: {}", result.returned_to_ground);
+
+// Customized Sweep: Using the Builder pattern for physics configuration
+let params = ModelParams::builder()
+    .ed_model(ElectronDensityModel::DualChapman)
+    .mag_model(MagneticFieldModel::Dipole)
+    .fc(8.0)
+    .hm(300.0)
+    .build()
+    .unwrap();
+
+let sweep_config = FanTraceConfig {
+    freq_mhz: 15.0,
+    ray_mode: RayMode::Ordinary.to_sign(),
+    elev_min: 5.0,
+    elev_max: 85.0,
+    elev_step: 1.0, 
+    step_size: 5.0,
+    max_steps: 1000,
+    max_hops: 1,
+    azimuth_deg: 45.0,
+    tx_lat_deg: 40.0,
+    params,
+};
+
+// Fan traces run automatically in parallel via Rayon on multi-core native systems!
+let sweep_results = fan_trace(&sweep_config).unwrap();
+println!("Computed {} rays in {} ms", sweep_results.n_rays, sweep_results.elapsed_ms);
 ```
 
 ## Usage (WASM)

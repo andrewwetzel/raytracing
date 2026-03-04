@@ -61,6 +61,10 @@ pub struct FanRay {
     pub range_km: f64,
     pub hops: u8,
     pub absorption: f64,
+    /// Landing latitude in degrees (geographic). 0.0 if ray escaped.
+    pub landing_lat: f64,
+    /// Landing longitude in degrees (relative, phi=0 at TX). 0.0 if ray escaped.
+    pub landing_lon: f64,
     pub pts: Vec<FanRayPoint>,
 }
 
@@ -158,6 +162,17 @@ pub fn fan_trace(config: &FanTraceConfig) -> Result<FanTraceResult, TraceError> 
                 }
             }
 
+            // Extract landing coordinates from last point
+            let (landing_lat, landing_lon) = if returned {
+                if let Some(last) = all_pts.last() {
+                    (last.lat, last.lon)
+                } else {
+                    (0.0, 0.0)
+                }
+            } else {
+                (0.0, 0.0)
+            };
+
             Some(FanRay {
                 elev: (elev * 10.0).round() / 10.0,
                 max_h: (max_h * 100.0).round() / 100.0,
@@ -165,6 +180,8 @@ pub fn fan_trace(config: &FanTraceConfig) -> Result<FanTraceResult, TraceError> 
                 range_km: (total_range * 10.0).round() / 10.0,
                 hops: hops_completed,
                 absorption: (total_absorption * 10000.0).round() / 10000.0,
+                landing_lat,
+                landing_lon,
                 pts: all_pts,
             })
         })

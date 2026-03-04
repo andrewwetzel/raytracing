@@ -5,7 +5,7 @@
     "Andrew Wetzel <andrew@wetzel.work>"
   ],
   "description": "High-performance ionospheric ray tracing engine — Hamilton's equations for HF radio propagation through a magnetized, collisional plasma",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "license": "MIT",
   "repository": {
     "type": "git",

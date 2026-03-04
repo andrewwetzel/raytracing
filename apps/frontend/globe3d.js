@@ -14,6 +14,7 @@ let gridGroup;
 let rayGroup; // Group holding all ray line objects
 let txMarker;
 let rxMarker;
+let landingMarker;
 let arcGroup;
 let animFrameId;
 let raycaster, mouse;
@@ -128,6 +129,12 @@ export function updateGlobeRays(traceGroups, txLatDeg, txLonDeg, rxLatDeg, rxLon
         arcGroup = null;
     }
 
+    // Remove old landing marker
+    if (landingMarker) {
+        scene.remove(landingMarker);
+        landingMarker = null;
+    }
+
     // Get TX lat/lon
     const txLat = txLatDeg ?? 40;
     const txLon = txLonDeg ?? 0;
@@ -188,6 +195,18 @@ export function updateGlobeRays(traceGroups, txLatDeg, txLonDeg, rxLatDeg, rxLon
         }
     }
     console.log(`Updated 3D Globe with ${renderedCount} total drawn rays. traceGroups:`, traceGroups);
+
+    // Draw landing marker for the last successful trace ray
+    for (let gi = traceGroups.length - 1; gi >= 0; gi--) {
+        const g = traceGroups[gi];
+        if (g.color === '#10b981' && g.rays.length > 0) {
+            const ray = g.rays[0];
+            if (ray.landing_lat !== undefined && ray.landing_lon !== undefined && ray.ground) {
+                createLandingMarker(ray.landing_lat, ray.landing_lon + (txLatDeg !== undefined ? txLonDeg ?? 0 : 0));
+            }
+            break;
+        }
+    }
 }
 
 export function setGlobeVisible(visible) {
@@ -503,6 +522,40 @@ function createRxMarker(latDeg, lonDeg) {
     rxMarker.add(pulseRing);
 
     scene.add(rxMarker);
+}
+
+function createLandingMarker(latDeg, lonDeg) {
+    landingMarker = new THREE.Group();
+
+    const pos = latLonAltToVec3(latDeg, lonDeg, 0);
+
+    // Diamond shape using an octahedron
+    const diamondGeom = new THREE.OctahedronGeometry(0.015, 0);
+    const diamondMat = new THREE.MeshBasicMaterial({
+        color: 0xf59e0b,  // amber/yellow
+        transparent: true,
+        opacity: 0.9,
+    });
+    const diamond = new THREE.Mesh(diamondGeom, diamondMat);
+    diamond.position.copy(pos);
+    diamond.lookAt(pos.clone().multiplyScalar(2));
+    landingMarker.add(diamond);
+
+    // Pulsing ring
+    const ringGeom = new THREE.RingGeometry(0.016, 0.022, 32);
+    const ringMat = new THREE.MeshBasicMaterial({
+        color: 0xf59e0b,
+        transparent: true,
+        opacity: 0.3,
+        side: THREE.DoubleSide,
+    });
+    const ring = new THREE.Mesh(ringGeom, ringMat);
+    ring.position.copy(pos);
+    ring.lookAt(pos.clone().multiplyScalar(2));
+    ring.userData.pulse = true;
+    landingMarker.add(ring);
+
+    scene.add(landingMarker);
 }
 
 function createDirectionArc(txLat, txLon, rxLat, rxLon) {

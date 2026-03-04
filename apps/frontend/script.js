@@ -241,6 +241,44 @@ function computeBearingDistance(lat1, lon1, lat2, lon2) {
   return { distance_km, bearing_deg };
 }
 
+/**
+ * Compute cross-track and along-track error of a landing point relative
+ * to the TX→RX great-circle path.
+ * 
+ * @param {number} txLat - TX latitude (degrees)
+ * @param {number} txLon - TX longitude (degrees)
+ * @param {number} rxLat - RX target latitude (degrees)
+ * @param {number} rxLon - RX target longitude (degrees)
+ * @param {number} landLat - Actual landing latitude (degrees)
+ * @param {number} landLon - Actual landing longitude (degrees)
+ * @returns {{ crossTrack_km: number, alongTrack_km: number, totalError_km: number }}
+ *   crossTrack_km > 0 means landing is RIGHT of the TX→RX path
+ */
+function computeCrossTrackError(txLat, txLon, rxLat, rxLon, landLat, landLon) {
+  const R = 6371;
+  const toRad = Math.PI / 180;
+
+  // Angular distance TX → landing
+  const d13 = computeBearingDistance(txLat, txLon, landLat, landLon).distance_km / R;
+  // Bearing TX → RX (intended)
+  const θ12 = computeBearingDistance(txLat, txLon, rxLat, rxLon).bearing_deg * toRad;
+  // Bearing TX → landing (actual)
+  const θ13 = computeBearingDistance(txLat, txLon, landLat, landLon).bearing_deg * toRad;
+
+  // Cross-track distance (signed: positive = right of path)
+  const dxt = Math.asin(Math.sin(d13) * Math.sin(θ13 - θ12));
+  const crossTrack_km = dxt * R;
+
+  // Along-track distance
+  const dat = Math.acos(Math.cos(d13) / Math.max(Math.cos(dxt), 1e-12));
+  const targetDist = computeBearingDistance(txLat, txLon, rxLat, rxLon).distance_km;
+  const alongTrack_km = dat * R - targetDist; // positive = overshot, negative = undershot
+
+  const totalError_km = Math.sqrt(crossTrack_km ** 2 + alongTrack_km ** 2);
+
+  return { crossTrack_km, alongTrack_km, totalError_km };
+}
+
 /** Update computed bearing/distance and auto-fill azimuth + target range */
 function updateTxRxComputed() {
   const rxLat = getRxLat();
@@ -1512,7 +1550,7 @@ async function targetBisection() {
   const varCfg = SEARCH_VAR_CONFIG[searchVar];
 
   const logBody = document.getElementById('target-log-body');
-  logBody.innerHTML = `<div class="target-log-row header"><span>#</span><span>${varCfg.logLabel}</span><span>Range</span><span>Error</span></div>`;
+  logBody.innerHTML = `<div class="target-log-row header"><span>#</span><span>${varCfg.logLabel}</span><span>Range</span><span>Error</span><span>Lateral</span></div>`;
 
   targetMarkerRange = targetRange;
   traceGroups = [];
@@ -1670,12 +1708,26 @@ async function targetBisection() {
       config: body,
     });
 
+    // Compute lateral error if ray landed and RX target is set
+    let lateralStr = '—';
+    let crossTrackKm = null;
+    const rxLat = getRxLat();
+    const rxLon = getRxLon();
+    if (isGround && rxLat !== null && rxLon !== null) {
+      const landLat = ray.landing_lat;
+      const landLon = ray.landing_lon + getTxLon(); // offset from relative to geographic
+      const ctErr = computeCrossTrackError(getTxLat(), getTxLon(), rxLat, rxLon, landLat, landLon);
+      crossTrackKm = ctErr.crossTrack_km;
+      const dir = crossTrackKm >= 0 ? 'R' : 'L';
+      lateralStr = `${Math.abs(crossTrackKm).toFixed(1)} ${dir}`;
+    }
+
     // Log entry
     const rowClass = !isGround ? 'escape' : (error <= tolerance ? 'success' : 'fail');
     const rangeStr = isGround ? `${range} km` : 'escaped';
     const errorStr = isGround ? `${error.toFixed(1)} km` : '—';
     const valStr = searchMid.toFixed(4) + varCfg.unit;
-    logBody.innerHTML += `<div class="target-log-row ${rowClass}"><span>${iter + 1}</span><span>${valStr}</span><span>${rangeStr}</span><span>${errorStr}</span></div>`;
+    logBody.innerHTML += `<div class="target-log-row ${rowClass}"><span>${iter + 1}</span><span>${valStr}</span><span>${rangeStr}</span><span>${errorStr}</span><span>${lateralStr}</span></div>`;
     logBody.scrollTop = logBody.scrollHeight;
 
     render();
@@ -1728,6 +1780,118 @@ async function targetBisection() {
   if (!found && bestRay) {
     const valStr = bestVal.toFixed(2) + varCfg.unit;
     logBody.innerHTML += `<div class="target-log-row fail"><span>—</span><span>Best: ${valStr}</span><span>${bestRay.range_km} km</span><span>${bestError.toFixed(1)} km</span></div>`;
+  }
+
+  // ---- Phase 2: Azimuth correction for lateral deflection ----
+  if (found && bestRay) {
+    const rxLat = getRxLat();
+    const rxLon = getRxLon();
+    if (rxLat !== null && rxLon !== null) {
+      const landLat0 = bestRay.landing_lat;
+      const landLon0 = bestRay.landing_lon + getTxLon();
+      const ctErr0 = computeCrossTrackError(getTxLat(), getTxLon(), rxLat, rxLon, landLat0, landLon0);
+      const lateralTolerance = tolerance; // reuse same tolerance for lateral
+
+      if (Math.abs(ctErr0.crossTrack_km) > lateralTolerance) {
+        btn.querySelector('.btn-label').textContent = 'Correcting azimuth...';
+        logBody.innerHTML += `<div class="target-log-row header"><span>#</span><span>Azimuth</span><span>Range</span><span>Error</span><span>Lateral</span></div>`;
+
+        const nominalAz = getAzimuth();
+        let azLo = nominalAz - 5;
+        let azHi = nominalAz + 5;
+        const convergedElev = bestVal;
+        let bestAzRay = bestRay;
+        let bestAzCross = ctErr0.crossTrack_km;
+        let bestAz = nominalAz;
+        const maxAzIter = 15;
+
+        for (let azIter = 0; azIter < maxAzIter; azIter++) {
+          if (stopTargeting) break;
+          const azMid = (azLo + azHi) / 2;
+
+          // Build config with converged elevation and trial azimuth
+          const azBody = varCfg.applyToConfig({ ...baseConfig }, convergedElev);
+          azBody.azimuth_deg = azMid;
+
+          let azData;
+          try {
+            const resultJson = trace_fan_wasm(JSON.stringify(azBody));
+            azData = JSON.parse(resultJson);
+          } catch (err) {
+            console.error('Azimuth correction trace error:', err);
+            break;
+          }
+
+          if (!azData.rays || azData.rays.length === 0) break;
+          const azRay = azData.rays[0];
+
+          if (!azRay.ground) {
+            // Ray escaped with this azimuth — narrow toward nominal
+            if (azMid < nominalAz) azLo = azMid;
+            else azHi = azMid;
+            logBody.innerHTML += `<div class="target-log-row escape"><span>Az${azIter + 1}</span><span>${azMid.toFixed(2)}°</span><span>escaped</span><span>—</span><span>—</span></div>`;
+          } else {
+            const azLandLat = azRay.landing_lat;
+            const azLandLon = azRay.landing_lon + getTxLon();
+            const azCtErr = computeCrossTrackError(getTxLat(), getTxLon(), rxLat, rxLon, azLandLat, azLandLon);
+            const azCross = azCtErr.crossTrack_km;
+            const azRange = azRay.range_km;
+            const azRangeErr = Math.abs(azRange - targetRange);
+
+            // Track best azimuth result
+            if (Math.abs(azCross) < Math.abs(bestAzCross)) {
+              bestAzCross = azCross;
+              bestAzRay = azRay;
+              bestAz = azMid;
+            }
+
+            const dir = azCross >= 0 ? 'R' : 'L';
+            const azRowClass = Math.abs(azCross) <= lateralTolerance ? 'success' : 'fail';
+            logBody.innerHTML += `<div class="target-log-row ${azRowClass}"><span>Az${azIter + 1}</span><span>${azMid.toFixed(2)}°</span><span>${azRange} km</span><span>${azRangeErr.toFixed(1)} km</span><span>${Math.abs(azCross).toFixed(1)} ${dir}</span></div>`;
+            logBody.scrollTop = logBody.scrollHeight;
+
+            // Add to trace groups for visualization
+            traceGroups.push({
+              label: `Az ${azMid.toFixed(1)}°`,
+              color: Math.abs(azCross) <= lateralTolerance ? '#10b981' : '#f59e0b',
+              rays: [azRay],
+              config: azBody,
+            });
+
+            render();
+            if (viewMode === '3d') updateGlobeRays(traceGroups, getTxLat(), getTxLon(), rxLat, rxLon);
+            updateLegend();
+
+            // Check lateral convergence
+            if (Math.abs(azCross) <= lateralTolerance) {
+              traceGroups[traceGroups.length - 1].color = '#10b981';
+              traceGroups[traceGroups.length - 1].label = `✅ Az ${azMid.toFixed(2)}° (${Math.abs(azCross).toFixed(1)} km ${dir})`;
+              render();
+              if (viewMode === '3d') updateGlobeRays(traceGroups, getTxLat(), getTxLon(), rxLat, rxLon);
+              updateLegend();
+              break;
+            }
+
+            // Bisect: if landing is RIGHT of path, decrease azimuth
+            if (azCross > 0) {
+              azHi = azMid;
+            } else {
+              azLo = azMid;
+            }
+          }
+
+          await new Promise(r => setTimeout(r, 80));
+        }
+
+        // Log final azimuth result
+        const finalDir = bestAzCross >= 0 ? 'R' : 'L';
+        if (Math.abs(bestAzCross) <= lateralTolerance) {
+          logBody.innerHTML += `<div class="target-log-row success"><span>—</span><span colspan="4">✅ Azimuth corrected to ${bestAz.toFixed(2)}° (lateral: ${Math.abs(bestAzCross).toFixed(1)} km ${finalDir})</span></div>`;
+        } else {
+          logBody.innerHTML += `<div class="target-log-row fail"><span>—</span><span colspan="4">⚠ Best azimuth: ${bestAz.toFixed(2)}° (lateral: ${Math.abs(bestAzCross).toFixed(1)} km ${finalDir})</span></div>`;
+        }
+      }
+    }
   }
 
   // Update stats
