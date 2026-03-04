@@ -140,6 +140,7 @@ function setTxLocation(lat, lon, statusText, statusClass) {
     statusEl.textContent = statusText;
     statusEl.className = 'geo-status' + (statusClass ? ' ' + statusClass : '');
   }
+  updateTxRxComputed();
 }
 
 function requestGeolocation() {
@@ -773,6 +774,8 @@ function updateLegend() {
 // ============================================================
 
 function render() {
+  if (viewMode !== '2d') return;
+
   const canvas = document.getElementById('canvas');
   ctx = canvas.getContext('2d');
 
