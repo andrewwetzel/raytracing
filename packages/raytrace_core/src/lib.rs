@@ -1,7 +1,39 @@
 //! ionotrace — High-performance ionospheric ray tracing engine
 //!
 //! Rust implementation of the OT 75-76 ray tracing algorithm with WASM bindings.
-//! Ports the performance-critical inner loop: HAMLTN → AHWFWC → RKAM.
+//! Simulates HF radio wave propagation through a magnetized, collisional plasma
+//! using Hamilton's equations of motion.
+//!
+//! # Quick Start
+//!
+//! ```ignore
+//! use ionotrace::{TraceConfig, ModelParams};
+//!
+//! let config = TraceConfig::new(10.0, 20.0); // 10 MHz, 20° elevation
+//! let result = config.trace();
+//!
+//! println!("Max height: {:.2} km", result.max_height);
+//! println!("Ground range: {:.1} km", result.ground_range_km);
+//! println!("Returned to ground: {}", result.returned_to_ground);
+//! ```
+//!
+//! # Model Selection
+//!
+//! Override physics models via [`ModelParams`]:
+//!
+//! ```ignore
+//! use ionotrace::{TraceConfig, ModelParams};
+//! use ionotrace::params::{ElectronDensityModel, MagneticFieldModel};
+//!
+//! let config = TraceConfig {
+//!     params: ModelParams {
+//!         ed_model: ElectronDensityModel::DualChapman,
+//!         mag_model: MagneticFieldModel::Igrf14,
+//!         ..ModelParams::default()
+//!     },
+//!     ..TraceConfig::new(15.0, 30.0)
+//! };
+//! ```
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
@@ -9,11 +41,15 @@ use wasm_bindgen::prelude::*;
 use serde::{Serialize, Deserialize};
 
 pub mod params;
-pub mod complex;
+pub(crate) mod complex;
 pub mod models;
-pub mod hamiltonian;
-pub mod integrator;
+pub(crate) mod hamiltonian;
+pub(crate) mod integrator;
 pub mod tracer;
+
+// Public re-exports for ergonomic API
+pub use params::ModelParams;
+pub use tracer::{TraceConfig, TraceResult, TracePoint};
 
 #[cfg(target_arch = "wasm32")]
 use params::*;
@@ -84,6 +120,50 @@ struct FanTraceResponse {
     hm: f64,
 }
 
+#[cfg(target_arch = "wasm32")]
+fn parse_ed_model(v: u8) -> ElectronDensityModel {
+    match v {
+        1 => ElectronDensityModel::Elect1,
+        2 => ElectronDensityModel::Linear,
+        3 => ElectronDensityModel::QuasiParabolic,
+        4 => ElectronDensityModel::VarChapman,
+        5 => ElectronDensityModel::DualChapman,
+        _ => ElectronDensityModel::Chapman,
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn parse_mag_model(v: u8) -> MagneticFieldModel {
+    match v {
+        1 => MagneticFieldModel::Constant,
+        2 => MagneticFieldModel::Cubic,
+        3 => MagneticFieldModel::Igrf14,
+        _ => MagneticFieldModel::Dipole,
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn parse_rindex_model(v: u8) -> RefractiveIndexModel {
+    match v {
+        1 => RefractiveIndexModel::NoFieldNoCollisions,
+        2 => RefractiveIndexModel::NoFieldWithCollisions,
+        3 => RefractiveIndexModel::WithFieldNoCollisions,
+        _ => RefractiveIndexModel::Full,
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn parse_pert_model(v: u8) -> PerturbationModel {
+    match v {
+        1 => PerturbationModel::Torus,
+        2 => PerturbationModel::Trough,
+        3 => PerturbationModel::Shock,
+        4 => PerturbationModel::Bulge,
+        5 => PerturbationModel::Exponential,
+        _ => PerturbationModel::None,
+    }
+}
+
 /// Trace a fan of rays through the ionosphere (called from JavaScript).
 ///
 /// Accepts a JSON string request, returns a JSON string response.
@@ -111,16 +191,16 @@ pub fn trace_fan_wasm(request_json: &str) -> String {
     let step_size = req.step_size.unwrap_or(5.0);
     let max_steps = req.max_steps.unwrap_or(500);
     let max_hops = req.max_hops.unwrap_or(1).max(1).min(5);
-    let ed_model = req.ed_model.unwrap_or(0);
-    let mag_model = req.mag_model.unwrap_or(0);
-    let rindex_model = req.rindex_model.unwrap_or(0);
-    let pert_model = req.pert_model.unwrap_or(0);
+    let ed_model = parse_ed_model(req.ed_model.unwrap_or(0));
+    let mag_model = parse_mag_model(req.mag_model.unwrap_or(0));
+    let rindex_model = parse_rindex_model(req.rindex_model.unwrap_or(0));
+    let pert_model = parse_pert_model(req.pert_model.unwrap_or(0));
 
     let params = ModelParams {
         earth_r: EARTH_RADIUS,
         ed_model,
         mag_model,
-        col_model: 0,
+        col_model: CollisionModel::default(),
         rindex_model,
         fc, hm, sh,
         alpha: 0.5,
@@ -188,26 +268,14 @@ pub fn trace_fan_wasm(request_json: &str) -> String {
 
                 // If more hops remain, compute reflected state
                 if _hop < max_hops - 1 {
-                    // Get the final point's latitude for new launch position
                     if let Some(last_pt) = result.points.last() {
                         cur_lat = last_pt.lat_deg;
                     }
-                    // Reflect: use the same elevation angle (specular reflection off flat ground)
-                    // cur_elev stays the same, cur_az stays the same
-                    // This is a good approximation for spherical Earth
                 } else {
                     break;
                 }
             } else {
-                // Ray escaped — no more hops
                 break;
-            }
-        }
-
-        // If ray escaped (no ground return), get absorption from last point
-        if !returned {
-            if let Some(last_pt) = all_pts.last() {
-                // Use the absorption we can get from the traced result
             }
         }
 

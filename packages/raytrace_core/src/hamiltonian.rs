@@ -1,8 +1,10 @@
+//! Hamilton's equations for ray tracing (internal).
+
 use crate::params::*;
 use crate::models::refractive_index::compute_rindex;
 
-/// Compute derivatives [dr/dt, dθ/dt, dφ/dt, dkr/dt, dkth/dt, dkph/dt, dphase/dt, dabsorb/dt]
-pub fn hamltn(
+/// Compute derivatives [dr/dt, dθ/dt, dφ/dt, dkr/dt, dkth/dt, dkph/dt, dphase/dt, dabsorb/dt].
+pub(crate) fn hamltn(
     y: &[f64], freq_mhz: f64, ray_mode: f64,
     p: &ModelParams, rstart: bool,
 ) -> ([f64; 8], bool, f64, f64, f64) {

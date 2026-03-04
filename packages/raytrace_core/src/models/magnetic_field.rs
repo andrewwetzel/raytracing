@@ -1,30 +1,48 @@
 use crate::params::*;
 
+/// Result of magnetic field computation at a point.
+#[non_exhaustive]
 pub struct MagneticFieldResult {
+    /// Normalized gyrofrequency Y = fH/f.
     pub y: f64,
+    /// ∂Y/∂r.
     pub dydr: f64,
+    /// ∂Y/∂θ.
     pub dydth: f64,
+    /// ∂Y/∂φ.
     pub dydph: f64,
+    /// Radial component of Y.
     pub yr: f64,
+    /// Theta component of Y.
     pub yth: f64,
+    /// Phi component of Y.
     pub yph: f64,
+    /// ∂Yr/∂r.
     pub dyrdr: f64,
+    /// ∂Yr/∂θ.
     pub dyrdth: f64,
+    /// ∂Yr/∂φ.
     pub dyrdph: f64,
+    /// ∂Yθ/∂r.
     pub dythdr: f64,
+    /// ∂Yθ/∂θ.
     pub dythdth: f64,
+    /// ∂Yθ/∂φ.
     pub dythdph: f64,
+    /// ∂Yφ/∂r.
     pub dyphdr: f64,
+    /// ∂Yφ/∂θ.
     pub dyphdth: f64,
+    /// ∂Yφ/∂φ.
     pub dyphdph: f64,
 }
 
-/// Dispatch to selected magnetic field model
+/// Dispatch to selected magnetic field model.
 pub fn compute_mag(r: f64, theta: f64, phi: f64, freq_mhz: f64, p: &ModelParams) -> MagneticFieldResult {
     match p.mag_model {
-        1 => consty(r, theta, phi, freq_mhz, p),
-        2 => cubey(r, theta, phi, freq_mhz, p),
-        3 => harmony(r, theta, phi, freq_mhz, p),
+        MagneticFieldModel::Constant => consty(r, theta, phi, freq_mhz, p),
+        MagneticFieldModel::Cubic => cubey(r, theta, phi, freq_mhz, p),
+        MagneticFieldModel::Igrf14 => harmony(r, theta, phi, freq_mhz, p),
         _ => dipoly(r, theta, phi, freq_mhz, p),
     }
 }

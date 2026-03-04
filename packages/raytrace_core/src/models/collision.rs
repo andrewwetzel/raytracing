@@ -1,17 +1,23 @@
 use crate::params::*;
 
+/// Result of collision frequency computation at a point.
+#[non_exhaustive]
 pub struct CollisionResult {
+    /// Normalized collision frequency Z = ν/ω.
     pub z: f64,
+    /// ∂Z/∂r.
     pub dzdr: f64,
+    /// ∂Z/∂θ.
     pub dzdth: f64,
+    /// ∂Z/∂φ.
     pub dzdph: f64,
 }
 
-/// Dispatch to selected collision model
+/// Dispatch to selected collision model.
 pub fn compute_col(r: f64, theta: f64, phi: f64, freq_mhz: f64, p: &ModelParams) -> CollisionResult {
     match p.col_model {
-        1 => constz(r, theta, phi, freq_mhz, p),
-        2 => expz(r, theta, phi, freq_mhz, p),
+        CollisionModel::Constant => constz(r, theta, phi, freq_mhz, p),
+        CollisionModel::SingleExponential => expz(r, theta, phi, freq_mhz, p),
         _ => expz2(r, theta, phi, freq_mhz, p),
     }
 }

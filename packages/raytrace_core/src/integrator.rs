@@ -1,9 +1,11 @@
+//! RK4 / Adams-Moulton integrator (internal).
+
 use crate::params::ModelParams;
 use crate::hamiltonian::hamltn;
 
-pub const NN: usize = 8;
+pub(crate) const NN: usize = 8;
 
-pub struct IntegratorState {
+pub(crate) struct IntegratorState {
     pub y: [f64; NN],
     pub dydt: [f64; NN],
     pub yu: [[f64; NN]; 6],
@@ -54,7 +56,7 @@ impl IntegratorState {
     }
 }
 
-pub fn rk4_step(
+pub(crate) fn rk4_step(
     s: &mut IntegratorState,
     freq_mhz: f64, ray_mode: f64, p: &ModelParams,
 ) {
@@ -102,7 +104,7 @@ pub fn rk4_step(
     am_step(s, freq_mhz, ray_mode, p);
 }
 
-pub fn am_step(
+pub(crate) fn am_step(
     s: &mut IntegratorState,
     freq_mhz: f64, ray_mode: f64, p: &ModelParams,
 ) {

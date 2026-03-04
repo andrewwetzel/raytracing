@@ -4,8 +4,10 @@ use crate::models::electron_density::compute_ed;
 use crate::models::magnetic_field::compute_mag;
 use crate::models::collision::compute_col;
 
+/// Result of refractive index computation (internal).
+#[non_exhaustive]
 #[allow(dead_code)]
-pub struct RindexResult {
+pub(crate) struct RindexResult {
     pub n2_re: f64,
     pub n2_im: f64,
     pub h_re: f64,
@@ -25,17 +27,17 @@ pub struct RindexResult {
     pub new_kph: f64,
 }
 
-/// Dispatch to selected refractive index model
-pub fn compute_rindex(
+/// Dispatch to selected refractive index model.
+pub(crate) fn compute_rindex(
     r: f64, theta: f64, phi: f64,
     kr: f64, kth: f64, kph: f64,
     freq_mhz: f64, ray_mode: f64,
     p: &ModelParams, rstart: bool,
 ) -> RindexResult {
     match p.rindex_model {
-        1 => ahnfnc(r, theta, phi, kr, kth, kph, freq_mhz, ray_mode, p, rstart),
-        2 => ahnfwc(r, theta, phi, kr, kth, kph, freq_mhz, ray_mode, p, rstart),
-        3 => ahwfnc(r, theta, phi, kr, kth, kph, freq_mhz, ray_mode, p, rstart),
+        RefractiveIndexModel::NoFieldNoCollisions => ahnfnc(r, theta, phi, kr, kth, kph, freq_mhz, ray_mode, p, rstart),
+        RefractiveIndexModel::NoFieldWithCollisions => ahnfwc(r, theta, phi, kr, kth, kph, freq_mhz, ray_mode, p, rstart),
+        RefractiveIndexModel::WithFieldNoCollisions => ahwfnc(r, theta, phi, kr, kth, kph, freq_mhz, ray_mode, p, rstart),
         _ => ahwfwc(r, theta, phi, kr, kth, kph, freq_mhz, ray_mode, p, rstart),
     }
 }

@@ -23,30 +23,25 @@ Compiles to **WebAssembly** for in-browser use, or runs natively as a Rust libra
 ## Usage (Rust)
 
 ```rust
-use ionotrace::params::ModelParams;
-use ionotrace::tracer::trace_ray;
+use ionotrace::{TraceConfig, ModelParams};
+use ionotrace::params::{ElectronDensityModel, RayMode};
 
-let params = ModelParams::default(); // Chapman + Dipole + AHWFWC
-
-let result = trace_ray(
-    10.0,   // freq_mhz
-    -1.0,   // ray_mode (-1 = X-mode, +1 = O-mode)
-    20.0,   // elevation_deg
-    0.0,    // azimuth_deg
-    40.0,   // tx_lat_deg
-    2,      // int_mode (1=RK4, 2=RK4+AM, 3=RK4+AM+error)
-    5.0,    // step_size
-    500,    // max_steps
-    1e-4,   // e1max (error tolerance)
-    2e-6,   // e1min
-    100.0,  // e2max
-    &params,
-    1,      // print_every
-);
-
+// Simple: 10 MHz, 20° elevation, all defaults
+let result = TraceConfig::new(10.0, 20.0).trace();
 println!("Max height: {:.2} km", result.max_height);
-println!("Ground range: {:.1} km", result.ground_range_km);
-println!("Returned: {}", result.returned_to_ground);
+
+// Customized: dual-layer Chapman, O-mode, specific frequency
+let config = TraceConfig {
+    ray_mode: RayMode::Ordinary,
+    azimuth_deg: 45.0,
+    params: ModelParams {
+        ed_model: ElectronDensityModel::DualChapman,
+        fc: 8.0,
+        ..ModelParams::default()
+    },
+    ..TraceConfig::new(15.0, 30.0)
+};
+let result = config.trace();
 ```
 
 ## Usage (WASM)

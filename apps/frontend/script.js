@@ -2225,7 +2225,10 @@ function wireControls() {
 
       // Push current ray data to 3D
       const txLat = getTxLat();
-      updateGlobeRays(traceGroups, txLat);
+      const txLon = getTxLon();
+      const rxLat = getRxLat();
+      const rxLon = getRxLon();
+      updateGlobeRays(traceGroups, txLat, txLon, rxLat, rxLon);
 
       btn.textContent = '2D';
       btn.style.opacity = '1';

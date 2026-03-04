@@ -13,6 +13,7 @@ let earthMesh, atmosphereMesh, cloudMesh;
 let gridGroup;
 let rayGroup; // Group holding all ray line objects
 let txMarker;
+let rxMarker;
 let animFrameId;
 let raycaster, mouse;
 let clickCallback = null; // callback for click-to-pick
@@ -85,7 +86,7 @@ export function initGlobe(containerEl) {
     animate();
 }
 
-export function updateGlobeRays(traceGroups, txLatDeg) {
+export function updateGlobeRays(traceGroups, txLatDeg, txLonDeg, rxLatDeg, rxLonDeg) {
     if (!scene) return;
 
     // Clear old rays
@@ -102,22 +103,35 @@ export function updateGlobeRays(traceGroups, txLatDeg) {
         txMarker = null;
     }
 
+    // Remove old RX marker
+    if (rxMarker) {
+        scene.remove(rxMarker);
+        rxMarker = null;
+    }
+
     if (!traceGroups || traceGroups.length === 0) return;
 
-    // Get TX latitude from first trace group config, or use default
+    // Get TX lat/lon
     const txLat = txLatDeg ?? 40;
+    const txLon = txLonDeg ?? 0;
 
-    // TX marker
-    createTxMarker(txLat, 0);
+    // TX marker at actual location
+    createTxMarker(txLat, txLon);
 
-    // Draw rays
+    // RX marker if destination is set
+    if (rxLatDeg != null && rxLonDeg != null && !isNaN(rxLatDeg) && !isNaN(rxLonDeg)) {
+        createRxMarker(rxLatDeg, rxLonDeg);
+    }
+
+    // Draw rays — ray lon values are relative (tracer starts at phi=0),
+    // so offset by TX longitude to place on the real globe
     for (const group of traceGroups) {
         const color = new THREE.Color(group.color || '#60a5fa');
         for (const ray of group.rays) {
             if (!ray.pts || ray.pts.length < 2) continue;
             const positions = [];
             for (const pt of ray.pts) {
-                const pos = latLonAltToVec3(pt.lat, pt.lon, pt.h);
+                const pos = latLonAltToVec3(pt.lat, pt.lon + txLon, pt.h);
                 positions.push(pos.x, pos.y, pos.z);
             }
             const geometry = new THREE.BufferGeometry();
@@ -403,6 +417,48 @@ function createTxMarker(latDeg, lonDeg) {
     scene.add(txMarker);
 }
 
+function createRxMarker(latDeg, lonDeg) {
+    rxMarker = new THREE.Group();
+
+    const pos = latLonAltToVec3(latDeg, lonDeg, 0);
+    const towerTop = latLonAltToVec3(latDeg, lonDeg, 40); // 40km tall (exaggerated)
+
+    // Tower mast
+    const mastGeom = new THREE.BufferGeometry().setFromPoints([pos, towerTop]);
+    const mastMat = new THREE.LineBasicMaterial({ color: 0x06b6d4, linewidth: 2 });
+    rxMarker.add(new THREE.Line(mastGeom, mastMat));
+
+    // Dish at top (V shape using two lines)
+    const dishLeft = latLonAltToVec3(latDeg - 0.3, lonDeg - 0.3, 50);
+    const dishRight = latLonAltToVec3(latDeg + 0.3, lonDeg + 0.3, 50);
+    const dishGeom = new THREE.BufferGeometry().setFromPoints([dishLeft, towerTop, dishRight]);
+    const dishMat = new THREE.LineBasicMaterial({ color: 0x06b6d4, linewidth: 2 });
+    rxMarker.add(new THREE.Line(dishGeom, dishMat));
+
+    // Glowing dot at base
+    const dotGeom = new THREE.SphereGeometry(0.012, 12, 12);
+    const dotMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4 });
+    const dot = new THREE.Mesh(dotGeom, dotMat);
+    dot.position.copy(pos);
+    rxMarker.add(dot);
+
+    // Pulsing ring at base
+    const pulseGeom = new THREE.RingGeometry(0.014, 0.018, 32);
+    const pulseMat = new THREE.MeshBasicMaterial({
+        color: 0x06b6d4,
+        transparent: true,
+        opacity: 0.3,
+        side: THREE.DoubleSide,
+    });
+    const pulseRing = new THREE.Mesh(pulseGeom, pulseMat);
+    pulseRing.position.copy(pos);
+    pulseRing.lookAt(pos.clone().multiplyScalar(2));
+    pulseRing.userData.pulse = true;
+    rxMarker.add(pulseRing);
+
+    scene.add(rxMarker);
+}
+
 function onGlobeClickInternal(event) {
     if (!earthMesh || !raycaster || !camera) return;
 
@@ -445,6 +501,18 @@ function animate() {
     // Pulse TX marker ring
     if (txMarker) {
         txMarker.children.forEach(child => {
+            if (child.userData.pulse) {
+                const t = (Date.now() % 2000) / 2000;
+                child.material.opacity = 0.15 + 0.2 * Math.sin(t * Math.PI * 2);
+                const s = 1 + 0.3 * Math.sin(t * Math.PI * 2);
+                child.scale.set(s, s, s);
+            }
+        });
+    }
+
+    // Pulse RX marker ring
+    if (rxMarker) {
+        rxMarker.children.forEach(child => {
             if (child.userData.pulse) {
                 const t = (Date.now() % 2000) / 2000;
                 child.material.opacity = 0.15 + 0.2 * Math.sin(t * Math.PI * 2);

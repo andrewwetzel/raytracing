@@ -1,30 +1,37 @@
 use crate::params::*;
 
+/// Result of electron density computation at a point.
+#[non_exhaustive]
 pub struct ElectronDensityResult {
+    /// Normalized electron density X = (fp/f)².
     pub x: f64,
+    /// ∂X/∂r.
     pub dxdr: f64,
+    /// ∂X/∂θ.
     pub dxdth: f64,
+    /// ∂X/∂φ.
     pub dxdph: f64,
+    /// ∂X/∂t (time derivative, usually 0).
     pub dxdt: f64,
 }
 
-/// Dispatch to the selected electron density model, then apply perturbation
+/// Dispatch to the selected electron density model, then apply perturbation.
 pub fn compute_ed(r: f64, theta: f64, phi: f64, freq_mhz: f64, p: &ModelParams) -> ElectronDensityResult {
     let mut ed = match p.ed_model {
-        1 => elect1_ed(r, theta, phi, freq_mhz, p),
-        2 => linear(r, theta, phi, freq_mhz, p),
-        3 => qparab(r, theta, phi, freq_mhz, p),
-        4 => vchapx(r, theta, phi, freq_mhz, p),
-        5 => dchapt(r, theta, phi, freq_mhz, p),
+        ElectronDensityModel::Elect1 => elect1_ed(r, theta, phi, freq_mhz, p),
+        ElectronDensityModel::Linear => linear(r, theta, phi, freq_mhz, p),
+        ElectronDensityModel::QuasiParabolic => qparab(r, theta, phi, freq_mhz, p),
+        ElectronDensityModel::VarChapman => vchapx(r, theta, phi, freq_mhz, p),
+        ElectronDensityModel::DualChapman => dchapt(r, theta, phi, freq_mhz, p),
         _ => chapx(r, theta, phi, freq_mhz, p),
     };
     // Apply perturbation modifier (multiplicative)
     match p.pert_model {
-        1 => apply_torus(&mut ed, r, theta, phi, p),
-        2 => apply_trough(&mut ed, r, theta, phi, p),
-        3 => apply_shock(&mut ed, r, theta, phi, p),
-        4 => apply_bulge(&mut ed, r, theta, phi, freq_mhz, p),
-        5 => apply_expx_pert(&mut ed, r, p),
+        PerturbationModel::Torus => apply_torus(&mut ed, r, theta, phi, p),
+        PerturbationModel::Trough => apply_trough(&mut ed, r, theta, phi, p),
+        PerturbationModel::Shock => apply_shock(&mut ed, r, theta, phi, p),
+        PerturbationModel::Bulge => apply_bulge(&mut ed, r, theta, phi, freq_mhz, p),
+        PerturbationModel::Exponential => apply_expx_pert(&mut ed, r, p),
         _ => {}
     }
     ed

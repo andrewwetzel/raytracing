@@ -1,3 +1,5 @@
+//! Ray tracing execution and result types.
+
 use std::f64::consts::PI;
 use serde::Serialize;
 
@@ -5,30 +7,149 @@ use crate::params::*;
 use crate::hamiltonian::hamltn;
 use crate::integrator::*;
 
-/// A point along the ray path
-#[derive(Serialize)]
+/// A point along the ray path.
+#[non_exhaustive]
+#[derive(Serialize, Clone, Debug)]
 pub struct TracePoint {
+    /// Integration step number.
     pub step: usize,
+    /// Integration parameter (dimensionless time).
     pub t: f64,
+    /// Height above Earth's surface in km.
     pub height_km: f64,
+    /// Geographic latitude in degrees.
     pub lat_deg: f64,
+    /// Geographic longitude in degrees.
     pub lon_deg: f64,
+    /// Great-circle ground range from transmitter in km.
     pub ground_range_km: f64,
+    /// Group path (approximation).
     pub group_path: f64,
+    /// Phase path.
     pub phase_path: f64,
+    /// Cumulative absorption in dB.
     pub absorption: f64,
 }
 
-/// Result of tracing one ray
-#[derive(Serialize)]
+/// Result of tracing a single ray through the ionosphere.
+#[non_exhaustive]
+#[derive(Serialize, Clone, Debug)]
 pub struct TraceResult {
+    /// Ray path points (sampled every `print_every` steps + ground return).
     pub points: Vec<TracePoint>,
+    /// Peak altitude reached by the ray in km.
     pub max_height: f64,
+    /// Total ground range if the ray returned, in km.
     pub ground_range_km: f64,
+    /// Whether the ray returned to the ground.
     pub returned_to_ground: bool,
+    /// Total integration steps taken.
     pub n_steps: usize,
 }
 
+/// Configuration for tracing a ray through the ionosphere.
+///
+/// Use [`TraceConfig::new`] for a minimal setup, then override fields as needed:
+///
+/// ```ignore
+/// use ionotrace::{TraceConfig, ModelParams};
+/// use ionotrace::params::RayMode;
+///
+/// let config = TraceConfig {
+///     ray_mode: RayMode::Ordinary,
+///     azimuth_deg: 45.0,
+///     ..TraceConfig::new(10.0, 20.0)
+/// };
+/// let result = config.trace();
+/// println!("Max height: {:.2} km", result.max_height);
+/// ```ignore
+///
+/// # Stability
+///
+/// This struct is `#[non_exhaustive]` — always construct with `..TraceConfig::new()`
+/// to remain forward-compatible.
+#[non_exhaustive]
+#[derive(Clone, Debug)]
+pub struct TraceConfig {
+    /// Radio wave frequency in MHz.
+    pub freq_mhz: f64,
+    /// Wave mode (ordinary or extraordinary).
+    pub ray_mode: RayMode,
+    /// Launch elevation angle in degrees (0 = horizontal, 90 = vertical).
+    pub elevation_deg: f64,
+    /// Launch azimuth in degrees (0 = north, clockwise).
+    pub azimuth_deg: f64,
+    /// Transmitter latitude in degrees.
+    pub tx_lat_deg: f64,
+    /// Integration mode: 1 = RK4 only, 2 = RK4+Adams-Moulton, 3 = RK4+AM+error control.
+    pub int_mode: usize,
+    /// Integration step size (dimensionless).
+    pub step_size: f64,
+    /// Maximum number of integration steps.
+    pub max_steps: usize,
+    /// Upper error tolerance for adaptive step control.
+    pub e1max: f64,
+    /// Lower error tolerance for adaptive step control.
+    pub e1min: f64,
+    /// Maximum step size for adaptive step control.
+    pub e2max: f64,
+    /// Record a point every N steps.
+    pub print_every: usize,
+    /// Physics model parameters.
+    pub params: ModelParams,
+}
+
+impl TraceConfig {
+    /// Create a new trace configuration with the given frequency and elevation.
+    ///
+    /// All other parameters are set to sensible defaults:
+    /// - X-mode, 0° azimuth, 40° latitude
+    /// - RK4+AM integrator, step size 5.0, max 500 steps
+    /// - Default `ModelParams` (Chapman + Dipole + AHWFWC)
+    pub fn new(freq_mhz: f64, elevation_deg: f64) -> Self {
+        Self {
+            freq_mhz,
+            ray_mode: RayMode::default(),
+            elevation_deg,
+            azimuth_deg: 0.0,
+            tx_lat_deg: 40.0,
+            int_mode: 2,
+            step_size: 5.0,
+            max_steps: 500,
+            e1max: 1e-4,
+            e1min: 2e-6,
+            e2max: 100.0,
+            print_every: 1,
+            params: ModelParams::default(),
+        }
+    }
+
+    /// Trace a ray through the ionosphere using this configuration.
+    ///
+    /// Returns a [`TraceResult`] containing the ray path and summary statistics.
+    pub fn trace(&self) -> TraceResult {
+        trace_ray(
+            self.freq_mhz,
+            self.ray_mode.to_sign(),
+            self.elevation_deg,
+            self.azimuth_deg,
+            self.tx_lat_deg,
+            self.int_mode,
+            self.step_size,
+            self.max_steps,
+            self.e1max,
+            self.e1min,
+            self.e2max,
+            &self.params,
+            self.print_every,
+        )
+    }
+}
+
+/// Trace a ray through the ionosphere (internal implementation).
+///
+/// Prefer [`TraceConfig::trace`] for the public API.
+#[doc(hidden)]
 pub fn trace_ray(
     freq_mhz: f64, ray_mode: f64,
     elevation_deg: f64, azimuth_deg: f64,
