@@ -2207,6 +2207,18 @@ function wireControls() {
     updateTxRxComputed();
   });
 
+  // Globe select buttons
+  document.getElementById('tx-globe-pick-btn')?.addEventListener('click', () => {
+    if (viewMode === '2d') {
+      document.getElementById('view-3d-btn')?.click();
+    }
+  });
+  document.getElementById('rx-globe-pick-btn')?.addEventListener('click', () => {
+    if (viewMode === '2d') {
+      document.getElementById('view-3d-btn')?.click();
+    }
+  });
+
   // Azimuth slider output sync
   const azSlider = document.getElementById('azimuth');
   const azOutput = document.getElementById('azimuth-val');

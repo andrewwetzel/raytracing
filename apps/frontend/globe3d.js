@@ -50,16 +50,28 @@ export function initGlobe(containerEl) {
     controls.rotateSpeed = 0.8;
     controls.zoomSpeed = 1.0;
 
-    // Lighting — realistic sun setup
-    const hemiLight = new THREE.HemisphereLight(0x4488cc, 0x002244, 0.4);
+    // Lighting — realistic sun setup (modified to light up the whole globe)
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0xffffff, 0.6);
     scene.add(hemiLight);
-    const sun = new THREE.DirectionalLight(0xfff5e6, 2.0);
-    sun.position.set(5, 3, 5);
-    scene.add(sun);
-    const fillLight = new THREE.DirectionalLight(0x4488ff, 0.3);
-    fillLight.position.set(-3, -1, -3);
-    scene.add(fillLight);
-    const ambient = new THREE.AmbientLight(0x1a2a44, 0.5);
+
+    // Instead of a single directional sun, we use multiple directional lights to light all sides
+    const light1 = new THREE.DirectionalLight(0xfff5e6, 1.0);
+    light1.position.set(5, 3, 5);
+    scene.add(light1);
+
+    const light2 = new THREE.DirectionalLight(0xfff5e6, 1.0);
+    light2.position.set(-5, 3, -5);
+    scene.add(light2);
+
+    const light3 = new THREE.DirectionalLight(0xfff5e6, 1.0);
+    light3.position.set(5, -3, -5);
+    scene.add(light3);
+
+    const light4 = new THREE.DirectionalLight(0xfff5e6, 1.0);
+    light4.position.set(-5, -3, 5);
+    scene.add(light4);
+
+    const ambient = new THREE.AmbientLight(0x404040, 1.5);
     scene.add(ambient);
 
     // Starfield background
@@ -177,7 +189,8 @@ export function onGlobeClick(callback) {
 function latLonAltToVec3(latDeg, lonDeg, altKm) {
     const r = 1 + altKm * SCALE;
     const lat = THREE.MathUtils.degToRad(latDeg);
-    const lon = THREE.MathUtils.degToRad(lonDeg);
+    // Offset by +PI/2 to match the texture seam mapping
+    const lon = THREE.MathUtils.degToRad(lonDeg) + Math.PI / 2;
     // Three.js: Y is up, X is right, Z is toward viewer
     return new THREE.Vector3(
         r * Math.cos(lat) * Math.sin(lon),
@@ -188,8 +201,11 @@ function latLonAltToVec3(latDeg, lonDeg, altKm) {
 
 function vec3ToLatLon(vec) {
     const r = vec.length();
-    const latRad = Math.asin(vec.y / r);
-    const lonRad = Math.atan2(vec.x, vec.z);
+    const latRad = Math.asin(Math.max(-1, Math.min(1, vec.y / r)));
+    // Texture seam is at +Z. For correct earth coordinates:
+    let lonRad = Math.atan2(vec.x, vec.z) - Math.PI / 2;
+    if (lonRad < -Math.PI) lonRad += Math.PI * 2;
+    if (lonRad > Math.PI) lonRad -= Math.PI * 2;
     return {
         lat: THREE.MathUtils.radToDeg(latRad),
         lon: THREE.MathUtils.radToDeg(lonRad),
