@@ -2245,14 +2245,36 @@ function wireControls() {
   });
 
   // Globe select buttons
-  let globePickMode = 'tx'; // default
+  let globePickMode = null; // default null, only pick on explicit command
+
+  function resetGlobePick() {
+    globePickMode = null;
+    document.getElementById('tx-globe-pick-btn')?.classList.remove('active-pick');
+    document.getElementById('rx-globe-pick-btn')?.classList.remove('active-pick');
+
+    // Hide and reset globe hints
+    const hint = document.getElementById('globe-hint');
+    if (hint) {
+      hint.style.display = 'none';
+      hint.className = 'globe-hint';
+    }
+  }
 
   document.getElementById('tx-globe-pick-btn')?.addEventListener('click', () => {
+    if (globePickMode === 'tx') {
+      resetGlobePick();
+      return;
+    }
+
+    resetGlobePick(); // clear UI states first
     globePickMode = 'tx';
+    document.getElementById('tx-globe-pick-btn')?.classList.add('active-pick');
+
     const hint = document.getElementById('globe-hint');
     if (hint) {
       hint.textContent = 'Click anywhere on globe to set TX (Start) location';
       hint.className = 'globe-hint tx-mode';
+      hint.style.display = 'block';
     }
     if (viewMode === '2d') {
       document.getElementById('view-3d-btn')?.click();
@@ -2260,23 +2282,20 @@ function wireControls() {
   });
 
   document.getElementById('rx-globe-pick-btn')?.addEventListener('click', () => {
-    globePickMode = 'rx';
-    const hint = document.getElementById('globe-hint');
-    if (hint) {
-      hint.textContent = 'Click anywhere on globe to set RX (Target) location';
-      hint.className = 'globe-hint rx-mode';
+    if (globePickMode === 'rx') {
+      resetGlobePick();
+      return;
     }
-    if (viewMode === '2d') {
-      document.getElementById('view-3d-btn')?.click();
-    }
-  });
 
-  document.getElementById('rx-tx-globe-pick-btn')?.addEventListener('click', () => {
+    resetGlobePick(); // clear UI states first
     globePickMode = 'rx';
+    document.getElementById('rx-globe-pick-btn')?.classList.add('active-pick');
+
     const hint = document.getElementById('globe-hint');
     if (hint) {
       hint.textContent = 'Click anywhere on globe to set Target (RX) location';
       hint.className = 'globe-hint rx-mode';
+      hint.style.display = 'block';
     }
     if (viewMode === '2d') {
       document.getElementById('view-3d-btn')?.click();
@@ -2305,11 +2324,16 @@ function wireControls() {
         initGlobe(globeEl);
         // Wire click-to-pick: relies on globePickMode state
         onGlobeClick((lat, lon) => {
+          if (!globePickMode) return; // Do nothing if a button isn't toggled!
+
           if (globePickMode === 'rx') {
             setRxLocation(lat, lon);
-          } else {
+          } else if (globePickMode === 'tx') {
             setTxLocation(lat, lon, `${lat.toFixed(1)}°, ${lon.toFixed(1)}°`, 'located');
           }
+
+          // Clear picking mode after 1 successful tap
+          resetGlobePick();
         });
         globeInitialized = true;
       }
