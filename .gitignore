@@ -1,6 +1,12 @@
 # Logs
 *.log
 
+# Generated data
+*.csv
+
+# Temp directories
+tmp/
+
 # Dependencies
 node_modules/
 

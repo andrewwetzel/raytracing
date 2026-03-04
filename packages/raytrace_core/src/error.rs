@@ -15,6 +15,13 @@ pub enum TraceError {
     InvalidStepSize(f64),
     /// Maximum steps must be strictly positive.
     InvalidMaxSteps(usize),
+    /// No ray returned to ground in the search range.
+    NoGroundReturn,
+    /// Solver did not converge within iteration limit.
+    SolverDidNotConverge {
+        /// Best error achieved in km.
+        best_error_km: f64,
+    },
 }
 
 impl fmt::Display for TraceError {
@@ -30,6 +37,14 @@ impl fmt::Display for TraceError {
             ),
             TraceError::InvalidStepSize(v) => write!(f, "Invalid step size: {}. Must be > 0.", v),
             TraceError::InvalidMaxSteps(v) => write!(f, "Invalid max steps: {}. Must be > 0.", v),
+            TraceError::NoGroundReturn => {
+                write!(f, "No ray returned to ground in the search range.")
+            }
+            TraceError::SolverDidNotConverge { best_error_km } => write!(
+                f,
+                "Solver did not converge. Best error: {:.2} km.",
+                best_error_km
+            ),
         }
     }
 }

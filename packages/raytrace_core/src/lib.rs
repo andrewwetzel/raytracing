@@ -46,6 +46,7 @@ pub(crate) mod hamiltonian;
 pub(crate) mod integrator;
 pub mod models;
 pub mod params;
+pub mod target;
 pub mod tracer;
 
 // Public re-exports for ergonomic API
@@ -53,6 +54,7 @@ pub use error::TraceError;
 pub use export::{export_fan_trace_csv, export_json, export_trace_csv};
 pub use fan::{fan_trace, FanRay, FanRayPoint, FanTraceConfig, FanTraceResult};
 pub use params::ModelParams;
+pub use target::{solve_target, SearchSpec, TargetConfig, TargetResult, TargetSolution};
 pub use tracer::{TraceConfig, TracePoint, TraceResult};
 
 #[cfg(target_arch = "wasm32")]
@@ -248,4 +250,42 @@ pub fn trace_fan_wasm(request_json: &str) -> String {
     };
 
     serde_json::to_string(&response).unwrap_or_default()
+}
+
+/// Solve for launch parameters to hit a target location (called from JavaScript).
+///
+/// Accepts a JSON string request, returns a JSON string response.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+pub fn solve_target_wasm(request_json: &str) -> String {
+    let config: TargetConfig = match serde_json::from_str(request_json) {
+        Ok(c) => c,
+        Err(e) => {
+            return serde_json::to_string(&serde_json::json!({
+                "error": format!("Invalid request: {}", e),
+                "solutions": [],
+                "rays_traced": 0
+            }))
+            .unwrap_or_default();
+        }
+    };
+
+    let start = js_sys::Date::now();
+
+    let result = match solve_target(&config) {
+        Ok(mut r) => {
+            r.elapsed_ms = (js_sys::Date::now() - start * 100.0).round() / 100.0;
+            r
+        }
+        Err(e) => {
+            return serde_json::to_string(&serde_json::json!({
+                "error": format!("{}", e),
+                "solutions": [],
+                "rays_traced": 0
+            }))
+            .unwrap_or_default();
+        }
+    };
+
+    serde_json::to_string(&result).unwrap_or_default()
 }
