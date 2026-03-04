@@ -121,8 +121,6 @@ export function updateGlobeRays(traceGroups, txLatDeg, txLonDeg, rxLatDeg, rxLon
         rxMarker = null;
     }
 
-    if (!traceGroups || traceGroups.length === 0) return;
-
     // Get TX lat/lon
     const txLat = txLatDeg ?? 40;
     const txLon = txLonDeg ?? 0;
@@ -134,6 +132,8 @@ export function updateGlobeRays(traceGroups, txLatDeg, txLonDeg, rxLatDeg, rxLon
     if (rxLatDeg != null && rxLonDeg != null && !isNaN(rxLatDeg) && !isNaN(rxLonDeg)) {
         createRxMarker(rxLatDeg, rxLonDeg);
     }
+
+    if (!traceGroups || traceGroups.length === 0) return;
 
     // Draw rays — ray lon values are relative (tracer starts at phi=0),
     // so offset by TX longitude to place on the real globe
@@ -390,7 +390,7 @@ function createTxMarker(latDeg, lonDeg) {
 
     // Tower mast
     const mastGeom = new THREE.BufferGeometry().setFromPoints([pos, towerTop]);
-    const mastMat = new THREE.LineBasicMaterial({ color: 0xf43f5e, linewidth: 2 });
+    const mastMat = new THREE.LineBasicMaterial({ color: 0x10b981, linewidth: 2 });
     txMarker.add(new THREE.Line(mastGeom, mastMat));
 
     // Wave rings at top
@@ -398,7 +398,7 @@ function createTxMarker(latDeg, lonDeg) {
         const ringR = 0.008 * i;
         const ringGeom = new THREE.RingGeometry(ringR - 0.001, ringR, 16);
         const ringMat = new THREE.MeshBasicMaterial({
-            color: 0xf43f5e,
+            color: 0x10b981,
             transparent: true,
             opacity: 0.4 - i * 0.1,
             side: THREE.DoubleSide,
@@ -411,7 +411,7 @@ function createTxMarker(latDeg, lonDeg) {
 
     // Glowing dot at base
     const dotGeom = new THREE.SphereGeometry(0.012, 12, 12);
-    const dotMat = new THREE.MeshBasicMaterial({ color: 0xf43f5e });
+    const dotMat = new THREE.MeshBasicMaterial({ color: 0x10b981 });
     const dot = new THREE.Mesh(dotGeom, dotMat);
     dot.position.copy(pos);
     txMarker.add(dot);
@@ -419,7 +419,7 @@ function createTxMarker(latDeg, lonDeg) {
     // Pulsing ring at base
     const pulseGeom = new THREE.RingGeometry(0.014, 0.018, 32);
     const pulseMat = new THREE.MeshBasicMaterial({
-        color: 0xf43f5e,
+        color: 0x10b981,
         transparent: true,
         opacity: 0.3,
         side: THREE.DoubleSide,
@@ -441,19 +441,19 @@ function createRxMarker(latDeg, lonDeg) {
 
     // Tower mast
     const mastGeom = new THREE.BufferGeometry().setFromPoints([pos, towerTop]);
-    const mastMat = new THREE.LineBasicMaterial({ color: 0x06b6d4, linewidth: 2 });
+    const mastMat = new THREE.LineBasicMaterial({ color: 0xef4444, linewidth: 2 });
     rxMarker.add(new THREE.Line(mastGeom, mastMat));
 
     // Dish at top (V shape using two lines)
     const dishLeft = latLonAltToVec3(latDeg - 0.3, lonDeg - 0.3, 50);
     const dishRight = latLonAltToVec3(latDeg + 0.3, lonDeg + 0.3, 50);
     const dishGeom = new THREE.BufferGeometry().setFromPoints([dishLeft, towerTop, dishRight]);
-    const dishMat = new THREE.LineBasicMaterial({ color: 0x06b6d4, linewidth: 2 });
+    const dishMat = new THREE.LineBasicMaterial({ color: 0xef4444, linewidth: 2 });
     rxMarker.add(new THREE.Line(dishGeom, dishMat));
 
     // Glowing dot at base
     const dotGeom = new THREE.SphereGeometry(0.012, 12, 12);
-    const dotMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4 });
+    const dotMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
     const dot = new THREE.Mesh(dotGeom, dotMat);
     dot.position.copy(pos);
     rxMarker.add(dot);
@@ -461,7 +461,7 @@ function createRxMarker(latDeg, lonDeg) {
     // Pulsing ring at base
     const pulseGeom = new THREE.RingGeometry(0.014, 0.018, 32);
     const pulseMat = new THREE.MeshBasicMaterial({
-        color: 0x06b6d4,
+        color: 0xef4444,
         transparent: true,
         opacity: 0.3,
         side: THREE.DoubleSide,

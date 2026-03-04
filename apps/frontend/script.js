@@ -1361,6 +1361,10 @@ function wireModeSwitching() {
     if (traceBtn) traceBtn.style.display = mode === 'fan' ? 'flex' : 'none';
     if (exportBtns) exportBtns.style.display = mode === 'fan' ? 'flex' : 'none';
 
+    // Show/hide RX location section
+    const rxSection = document.getElementById('rx-location-container');
+    if (rxSection) rxSection.style.display = mode === 'target' ? 'block' : 'none';
+
     // Clear target marker when switching to fan
     if (mode === 'fan') {
       targetMarkerRange = null;
