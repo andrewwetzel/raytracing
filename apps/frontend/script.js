@@ -1563,10 +1563,25 @@ async function targetBisection() {
           fanEscaped++;
         }
       }
+
+      // Visualize the fan scan live
+      traceGroups.push({
+        label: `${varCfg.logLabel}: ${val.toFixed(2)}`,
+        color: '#475569',
+        rays: data.rays || [],
+        config: body
+      });
+      render();
+      if (viewMode === '3d') updateGlobeRays(traceGroups, getTxLat(), getTxLon(), getRxLat(), getRxLon());
+      updateLegend();
+      await new Promise(r => setTimeout(r, 0)); // yield to UI
     } catch (err) {
       console.error('Fan sweep error:', err);
     }
   }
+
+  // Clear trace groups from fan scan before bisection
+  traceGroups = [];
 
   // Display fan sweep summary
   const summary = document.getElementById('target-range-summary');
@@ -1656,6 +1671,7 @@ async function targetBisection() {
     render();
     if (viewMode === '3d') updateGlobeRays(traceGroups, getTxLat(), getTxLon(), getRxLat(), getRxLon());
     updateLegend();
+    await new Promise(r => setTimeout(r, 0)); // yield to UI
 
     // Check convergence
     if (isGround && error <= tolerance) {
@@ -1663,6 +1679,7 @@ async function targetBisection() {
       traceGroups[traceGroups.length - 1].color = '#10b981';
       traceGroups[traceGroups.length - 1].label = `✅ ${valStr} → ${range} km`;
       render();
+      if (viewMode === '3d') updateGlobeRays(traceGroups, getTxLat(), getTxLon(), getRxLat(), getRxLon());
       updateLegend();
       break;
     }
