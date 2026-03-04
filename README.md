@@ -1,13 +1,13 @@
 # Ionospheric Ray Tracing
 
-3D ionospheric ray tracing engine based on OT Report 75-76 (1975). Implements Hamilton's equations for radio wave propagation through a magnetized, collisional plasma.
+3D ionospheric ray tracing engine based on [OT Report 75-76](https://www.ionolab.org/pubs/OT_Report_75_76.pdf) (1975). Implements Hamilton's equations for radio wave propagation through a magnetized, collisional plasma.
 
 **Two implementations, one algorithm:**
 
 | Engine | Language | Notes |
 |--------|----------|-------|
 | `raytrace_core` | **Rust** (WASM) | Production — runs in-browser via WebAssembly |
-| `ft_raytrace` | Fortran | Original port — all 47 subroutines with unit tests |
+| `ft_raytrace` | Fortran | Reference — original port of all 47 subroutines |
 
 Both produce identical results for the OT 75-76 sample case: **max height 74.08 km**, ray returns to ground.
 
@@ -15,18 +15,34 @@ Both produce identical results for the OT 75-76 sample case: **max height 74.08 
 
 ```
 packages/
-├── raytrace_core/        # 🚀 Rust engine compiled to WASM
-│   ├── src/lib.rs        # Full physics + integrator (~1570 lines)
+├── raytrace_core/          # 🚀 Rust engine compiled to WASM
+│   ├── src/
+│   │   ├── lib.rs          # Entry point + WASM bindings
+│   │   ├── params.rs       # Model parameters (ModelParams)
+│   │   ├── complex.rs      # Zero-alloc complex arithmetic
+│   │   ├── hamiltonian.rs  # Hamilton's equations (∂H/∂r, ∂H/∂k)
+│   │   ├── integrator.rs   # RK4 / Adams-Moulton stepper
+│   │   ├── tracer.rs       # Ray tracing loop
+│   │   └── models/         # Physics models
+│   │       ├── electron_density.rs   # Chapman, ELECT1, Linear, etc.
+│   │       ├── magnetic_field.rs     # Dipole, IGRF-14 (degree 13)
+│   │       ├── collision.rs          # Collision frequency profiles
+│   │       └── refractive_index.rs   # Appleton-Hartree formula
+│   ├── tests/              # Unit + integration tests
 │   └── Cargo.toml
-├── ft_raytrace/          # 🔬 Fortran engine (original port)
-│   ├── src/              # 47 subroutines (.f files)
-│   ├── test/             # Unit + end-to-end tests
+├── ft_raytrace/            # 🔬 Fortran reference engine
+│   ├── src/                # 47 subroutines (.f files)
+│   ├── test/               # Unit + end-to-end tests
 │   └── fpm.toml
 apps/
-└── frontend/             # Static web UI (loads WASM module)
+└── frontend/               # Static web UI
+    ├── index.html           # Main application
+    ├── script.js            # 2D canvas rendering + controls
+    ├── globe3d.js           # Three.js 3D globe view
+    ├── style.css            # Styles
+    └── pkg/                 # WASM build output (checked in)
 docs/
-├── 75-76.pdf             # Original OT Report 75-76
-└── equations.tex         # Key equations reference
+└── equations.tex            # Key equations in LaTeX
 ```
 
 ## Quick Start
@@ -34,7 +50,7 @@ docs/
 ### Local Development
 
 ```bash
-# Prerequisites: Rust 1.70+, wasm-pack
+# Prerequisites: Rust 1.70+, wasm-pack, just
 just build-wasm           # Build WASM module
 just serve-static         # Serve at http://localhost:9000
 ```
@@ -53,7 +69,7 @@ The WASM `pkg/` directory is checked into the repo. Rebuild locally with `just b
 ### Fortran
 
 ```bash
-# Prerequisites: gfortran, just (task runner)
+# Prerequisites: gfortran, just
 just test                    # Run all 47 tests
 just test-e2e-sample-case   # Run sample case validation
 ```
@@ -85,6 +101,14 @@ dkr/dt  =  ∂H/∂r   / (∂H/∂ω · c) + ...
 
 where `H = ½(c²k²/ω² - n²)` is the Hamiltonian and `n²` is the complex refractive index from the Appleton-Hartree formula. Integration uses RK4 with Adams-Moulton predictor-corrector.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing, and PR guidelines.
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for reporting vulnerabilities.
+
 ## References
 
 - **Original Paper:** *A Versatile Three-Dimensional Ray Tracing Computer Program for Radio Waves in the Ionosphere* — R. Michael Jones & Judith J. Stephenson, OT Report 75-76 (1975). [PDF](https://www.ionolab.org/pubs/OT_Report_75_76.pdf)
@@ -93,4 +117,4 @@ where `H = ½(c²k²/ω² - n²)` is the Hamiltonian and `n²` is the complex re
 
 ## License
 
-See [LICENSE](LICENSE) for details.
+MIT — see [LICENSE](LICENSE) for details.

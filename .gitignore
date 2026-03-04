@@ -1,11 +1,5 @@
 # Logs
-logs
 *.log
-npm-debug.log*
-firebase-debug.log*
-firebase-debug.*.log*
-
-
 
 # Dependencies
 node_modules/
@@ -38,6 +32,9 @@ test-results/
 *.swp
 *.swo
 *~
+
+# AI agent artifacts
+.gemini/
 
 # OS
 .DS_Store
