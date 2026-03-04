@@ -8,7 +8,7 @@
  */
 
 import init, { trace_fan_wasm } from './pkg/ionotrace.js';
-import { initGlobe, updateGlobeRays, setGlobeVisible, onGlobeClick } from './globe3d.js';
+import { initGlobe, updateGlobeRays, setGlobeVisible, onGlobeClick, lookAtLocation } from './globe3d.js';
 
 // ============================================================
 // State

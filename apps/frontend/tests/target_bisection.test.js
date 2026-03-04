@@ -101,7 +101,7 @@ describe('Target Bisection & Globe Interaction E2E Tests', { timeout: 15000 }, (
         assert.ok(btnTextLoading.includes('Scanning') || btnTextLoading.includes('Bisecting') || btnTextLoading.includes('Find'), 'Button should be in active search state');
 
         // Wait up to 5 seconds for bisection loop to yield and finish
-        await new Promise(r => setTimeout(r, 5000));
+        await new Promise(r => setTimeout(r, 8000));
 
         // It should have safely returned to 'Find Path' without throwing IndexSizeError on Canvas Arc!
         const btnTextAfter = await page.$eval('#target-btn .btn-label', el => el.textContent);

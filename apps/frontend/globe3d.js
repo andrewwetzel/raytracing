@@ -19,6 +19,7 @@ let arcGroup;
 let animFrameId;
 let raycaster, mouse;
 let clickCallback = null; // callback for click-to-pick
+let hasAutoOriented = false; // track if we've auto-oriented camera to TX
 
 // ---- Public API ----
 
@@ -100,8 +101,29 @@ export function initGlobe(containerEl) {
     animate();
 }
 
+/** Orient the globe camera to look at a given lat/lon. */
+export function lookAtLocation(lat, lon) {
+    if (!camera || !controls) return;
+    const latR = THREE.MathUtils.degToRad(lat);
+    const lonR = THREE.MathUtils.degToRad(lon);
+    const dist = camera.position.length() || 3.2;
+    camera.position.set(
+        dist * Math.cos(latR) * Math.sin(lonR),
+        dist * Math.sin(latR),
+        dist * Math.cos(latR) * Math.cos(lonR)
+    );
+    controls.target.set(0, 0, 0);
+    controls.update();
+}
+
 export function updateGlobeRays(traceGroups, txLatDeg, txLonDeg, rxLatDeg, rxLonDeg) {
     if (!scene) return;
+
+    // Auto-orient camera to TX on first render so rays are visible
+    if (!hasAutoOriented && txLatDeg != null && txLonDeg != null) {
+        lookAtLocation(txLatDeg, txLonDeg);
+        hasAutoOriented = true;
+    }
 
     // Clear old rays
     while (rayGroup.children.length > 0) {
