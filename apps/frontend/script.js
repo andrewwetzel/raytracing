@@ -2562,6 +2562,18 @@ function serializeStateToUrl() {
   const targetEl = document.getElementById('target-range');
   if (targetEl) params.set('target-range', targetEl.value);
 
+  // Target config fields
+  const targetIds = [
+    'target-tolerance', 'target-search-min', 'target-search-max',
+    'target-freq-min', 'target-freq-max', 'target-fc-min', 'target-fc-max',
+    'target-hm-min', 'target-hm-max', 'target-sh-min', 'target-sh-max',
+    'target-max-iter',
+  ];
+  for (const id of targetIds) {
+    const el = document.getElementById(id);
+    if (el && el.value !== '') params.set(id, el.value);
+  }
+
   // TX location
   const txLatEl = document.getElementById('tx-lat');
   const txLonEl = document.getElementById('tx-lon');
@@ -2642,6 +2654,21 @@ function restoreStateFromUrl() {
   if (targetRange) {
     const el = document.getElementById('target-range');
     if (el) el.value = targetRange;
+  }
+
+  // Restore target config fields
+  const targetIds = [
+    'target-tolerance', 'target-search-min', 'target-search-max',
+    'target-freq-min', 'target-freq-max', 'target-fc-min', 'target-fc-max',
+    'target-hm-min', 'target-hm-max', 'target-sh-min', 'target-sh-max',
+    'target-max-iter',
+  ];
+  for (const id of targetIds) {
+    const val = params.get(id);
+    if (val !== null) {
+      const el = document.getElementById(id);
+      if (el) el.value = val;
+    }
   }
 
   updateComboCount();
