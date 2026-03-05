@@ -210,6 +210,15 @@ fn initial_bearing(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
 // Internal: fire a single ray and extract landing info
 // ============================================================
 
+/// Landing info for a single hop.
+#[derive(Debug, Clone)]
+struct HopLanding {
+    lat: f64,
+    lon: f64,
+    range_km: f64,
+    absorption: f64,
+}
+
 /// Outcome of a single ray trace for the solver.
 #[derive(Debug, Clone)]
 struct RayOutcome {
@@ -222,6 +231,7 @@ struct RayOutcome {
     group_path: f64,
     phase_path: f64,
     hops: u8,
+    hop_landings: Vec<HopLanding>,
     points: Option<Vec<TracePoint>>,
 }
 
@@ -248,6 +258,7 @@ fn fire_ray(
     let mut landing_lat = 0.0f64;
     let mut landing_lon = 0.0f64;
     let mut all_pts: Vec<TracePoint> = Vec::new();
+    let mut hop_landings: Vec<HopLanding> = Vec::new();
 
     for _hop in 0..config.max_hops {
         let result = trace_ray(
@@ -287,6 +298,12 @@ fn fire_ray(
                 total_group = last.group_path;
                 total_phase = last.phase_path;
                 cur_lat = last.lat_deg;
+                hop_landings.push(HopLanding {
+                    lat: last.lat_deg,
+                    lon: last.lon_deg,
+                    range_km: total_range,
+                    absorption: total_absorption,
+                });
             }
 
             if _hop >= config.max_hops - 1 {
@@ -307,22 +324,51 @@ fn fire_ray(
         group_path: total_group,
         phase_path: total_phase,
         hops,
+        hop_landings,
         points: if keep_path { Some(all_pts) } else { None },
     })
 }
 
-/// Compute the signed range error: positive if ray overshot, negative if undershot
-/// (measured along the TX→target bearing direction).
-fn signed_range_error(
-    landing_lat: f64,
-    landing_lon: f64,
+/// Compute the signed range error: positive if ray overshot, negative if undershot.
+/// Checks every hop landing and returns the error for the best-matching hop.
+fn signed_range_error_best_hop(
+    outcome: &RayOutcome,
     target_lat: f64,
     target_lon: f64,
     tx_lat: f64,
 ) -> f64 {
     let target_range = haversine_km(tx_lat, 0.0, target_lat, target_lon);
-    let landing_range = haversine_km(tx_lat, 0.0, landing_lat, landing_lon);
-    landing_range - target_range
+    let mut best_err = f64::MAX;
+    for hop in &outcome.hop_landings {
+        let landing_range = haversine_km(tx_lat, 0.0, hop.lat, hop.lon);
+        let err = landing_range - target_range;
+        if err.abs() < best_err.abs() {
+            best_err = err;
+        }
+    }
+    // Fallback to final landing if no hops
+    if best_err == f64::MAX {
+        let landing_range = haversine_km(tx_lat, 0.0, outcome.landing_lat, outcome.landing_lon);
+        best_err = landing_range - target_range;
+    }
+    best_err
+}
+
+/// Compute the great-circle distance from the best hop landing to the target.
+fn best_hop_gc_error(outcome: &RayOutcome, config: &TargetConfig) -> f64 {
+    let mut best = f64::INFINITY;
+    for hop in &outcome.hop_landings {
+        let d = haversine_km(hop.lat, hop.lon, config.target_lat_deg, config.target_lon_deg);
+        if d < best { best = d; }
+    }
+    if best == f64::INFINITY {
+        haversine_km(
+            outcome.landing_lat, outcome.landing_lon,
+            config.target_lat_deg, config.target_lon_deg,
+        )
+    } else {
+        best
+    }
 }
 
 // ============================================================
@@ -360,9 +406,8 @@ fn coarse_sweep(
             let outcome = fire_ray(freq, config.ray_mode, elev, az, config.tx_lat_deg, config, false);
             let signed_err = outcome.and_then(|o| {
                 if o.returned {
-                    Some(signed_range_error(
-                        o.landing_lat,
-                        o.landing_lon,
+                    Some(signed_range_error_best_hop(
+                        &o,
                         config.target_lat_deg,
                         config.target_lon_deg,
                         config.tx_lat_deg,
@@ -436,9 +481,8 @@ fn coarse_sweep(
                 fire_ray(freq, config.ray_mode, se, az, config.tx_lat_deg, config, false);
             let signed_err = outcome.and_then(|o| {
                 if o.returned {
-                    Some(signed_range_error(
-                        o.landing_lat,
-                        o.landing_lon,
+                    Some(signed_range_error_best_hop(
+                        &o,
                         config.target_lat_deg,
                         config.target_lon_deg,
                         config.tx_lat_deg,
@@ -517,19 +561,31 @@ fn bisect_elevation(
         let outcome = fire_ray(freq, config.ray_mode, mid, az, config.tx_lat_deg, config, false);
         match outcome {
             Some(o) if o.returned => {
-                let err = signed_range_error(
-                    o.landing_lat,
-                    o.landing_lon,
+                let err = signed_range_error_best_hop(
+                    &o,
                     config.target_lat_deg,
                     config.target_lon_deg,
                     config.tx_lat_deg,
                 );
-                let abs_err = haversine_km(
-                    o.landing_lat,
-                    o.landing_lon,
-                    config.target_lat_deg,
-                    config.target_lon_deg,
-                );
+                // Find best hop gc distance for abs_err
+                let abs_err = {
+                    let mut best = f64::INFINITY;
+                    for hop in &o.hop_landings {
+                        let d = haversine_km(
+                            hop.lat, hop.lon,
+                            config.target_lat_deg, config.target_lon_deg,
+                        );
+                        if d < best { best = d; }
+                    }
+                    if best == f64::INFINITY {
+                        haversine_km(
+                            o.landing_lat, o.landing_lon,
+                            config.target_lat_deg, config.target_lon_deg,
+                        )
+                    } else {
+                        best
+                    }
+                };
 
                 if abs_err < best_abs_err {
                     best_abs_err = abs_err;
@@ -581,19 +637,27 @@ fn nelder_mead_2d(
     let rho = 0.5;   // contraction
     let sigma = 0.5;  // shrink
 
-    // Objective: great-circle distance from landing to target
+    // Objective: great-circle distance from best hop landing to target
     let mut objective = |elev: f64, az: f64| -> (f64, Option<RayOutcome>) {
         *rays_traced += 1;
         let elev_clamped = elev.clamp(config.elev_min, config.elev_max);
         match fire_ray(freq, config.ray_mode, elev_clamped, az, config.tx_lat_deg, config, false) {
             Some(o) if o.returned => {
-                let dist = haversine_km(
-                    o.landing_lat,
-                    o.landing_lon,
-                    config.target_lat_deg,
-                    config.target_lon_deg,
-                );
-                (dist, Some(o))
+                let mut best_dist = f64::INFINITY;
+                for hop in &o.hop_landings {
+                    let d = haversine_km(
+                        hop.lat, hop.lon,
+                        config.target_lat_deg, config.target_lon_deg,
+                    );
+                    if d < best_dist { best_dist = d; }
+                }
+                if best_dist == f64::INFINITY {
+                    best_dist = haversine_km(
+                        o.landing_lat, o.landing_lon,
+                        config.target_lat_deg, config.target_lon_deg,
+                    );
+                }
+                (best_dist, Some(o))
             }
             _ => (1e9, None), // penalty for non-returning rays
         }
@@ -761,24 +825,14 @@ pub fn solve_target(config: &TargetConfig) -> Result<TargetResult, TraceError> {
             // Phase 2: Bisection for each bracket
             for bracket in &brackets {
                 if let Some((elev, outcome)) = bisect_elevation(freq, az, bracket, config, &mut rays) {
-                    let error = haversine_km(
-                        outcome.landing_lat,
-                        outcome.landing_lon,
-                        config.target_lat_deg,
-                        config.target_lon_deg,
-                    );
+                    let error = best_hop_gc_error(&outcome, config);
 
                     // Phase 3: Nelder-Mead polish if not yet within tolerance
                     let (final_elev, final_az, final_outcome, final_error) = if error > config.error_limit_km {
                         if let Some((nm_elev, nm_az, nm_outcome)) =
                             nelder_mead_2d(freq, elev, az, config, &mut rays)
                         {
-                            let nm_err = haversine_km(
-                                nm_outcome.landing_lat,
-                                nm_outcome.landing_lon,
-                                config.target_lat_deg,
-                                config.target_lon_deg,
-                            );
+                            let nm_err = best_hop_gc_error(&nm_outcome, config);
                             if nm_err < error {
                                 (nm_elev, nm_az, nm_outcome, nm_err)
                             } else {
@@ -792,12 +846,7 @@ pub fn solve_target(config: &TargetConfig) -> Result<TargetResult, TraceError> {
                         if let Some((nm_elev, nm_az, nm_outcome)) =
                             nelder_mead_2d(freq, elev, az, config, &mut rays)
                         {
-                            let nm_err = haversine_km(
-                                nm_outcome.landing_lat,
-                                nm_outcome.landing_lon,
-                                config.target_lat_deg,
-                                config.target_lon_deg,
-                            );
+                            let nm_err = best_hop_gc_error(&nm_outcome, config);
                             if nm_err < error {
                                 (nm_elev, nm_az, nm_outcome, nm_err)
                             } else {

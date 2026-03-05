@@ -52,6 +52,15 @@ pub struct FanRayPoint {
     pub range: f64,
 }
 
+/// Summary of a single completed hop within a ray trace.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HopSummary {
+    pub range_km: f64,
+    pub lat: f64,
+    pub lon: f64,
+    pub absorption: f64,
+}
+
 /// A single completed ray within a fan trace.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FanRay {
@@ -66,6 +75,7 @@ pub struct FanRay {
     /// Landing longitude in degrees (relative, phi=0 at TX). 0.0 if ray escaped.
     pub landing_lon: f64,
     pub pts: Vec<FanRayPoint>,
+    pub hop_summaries: Vec<HopSummary>,
 }
 
 /// The result of a complete fan trace operation.
@@ -104,6 +114,7 @@ pub fn fan_trace(config: &FanTraceConfig) -> Result<FanTraceResult, TraceError> 
             let mut returned = false;
             let mut hops_completed: u8 = 0;
             let mut total_absorption = 0.0f64;
+            let mut hop_summaries = Vec::new();
 
             let mut cur_lat = config.tx_lat_deg;
 
@@ -148,6 +159,12 @@ pub fn fan_trace(config: &FanTraceConfig) -> Result<FanTraceResult, TraceError> 
 
                     if let Some(last_pt) = result.points.last() {
                         total_absorption += last_pt.absorption;
+                        hop_summaries.push(HopSummary {
+                            range_km: (total_range * 10.0).round() / 10.0,
+                            lat: (last_pt.lat_deg * 10000.0).round() / 10000.0,
+                            lon: (last_pt.lon_deg * 10000.0).round() / 10000.0,
+                            absorption: (total_absorption * 10000.0).round() / 10000.0,
+                        });
                     }
 
                     if _hop < config.max_hops - 1 {
@@ -183,6 +200,7 @@ pub fn fan_trace(config: &FanTraceConfig) -> Result<FanTraceResult, TraceError> 
                 landing_lat,
                 landing_lon,
                 pts: all_pts,
+                hop_summaries,
             })
         })
         .collect();

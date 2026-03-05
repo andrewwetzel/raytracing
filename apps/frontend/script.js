@@ -1536,14 +1536,43 @@ async function targetBisection() {
   }
 
   // Helper: compute signed range error (positive = overshot)
+  // Checks every hop landing and returns the best (closest to target)
   function signedError(ray) {
     if (!ray || !ray.ground) return null;
+    // Check per-hop landings if available
+    if (ray.hop_summaries && ray.hop_summaries.length > 0) {
+      let bestErr = null;
+      let bestAbs = Infinity;
+      for (const hop of ray.hop_summaries) {
+        const err = hop.range_km - targetRangeKm;
+        if (bestErr == null || Math.abs(err) < Math.abs(bestErr)) {
+          bestErr = err;
+          bestAbs = Math.abs(err);
+        }
+      }
+      return bestErr;
+    }
     return ray.range_km - targetRangeKm;
   }
 
   // Helper: compute great-circle error from target
+  // Checks every hop landing and returns the smallest error + absorption
   function gcError(ray) {
-    if (!ray || !ray.ground || ray.landing_lat == null) return Infinity;
+    if (!ray || !ray.ground) return Infinity;
+    let bestErr = Infinity;
+    // Check per-hop landings
+    if (ray.hop_summaries && ray.hop_summaries.length > 0) {
+      for (const hop of ray.hop_summaries) {
+        const dLat = (hop.lat - targetLat) * toRad;
+        const dLon = ((hop.lon || 0) - targetLon) * toRad;
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos(targetLat * toRad) * Math.cos(hop.lat * toRad) * Math.sin(dLon / 2) ** 2;
+        const err = 2 * 6371 * Math.asin(Math.sqrt(a));
+        if (err < bestErr) bestErr = err;
+      }
+      return bestErr;
+    }
+    // Fallback to final landing
+    if (ray.landing_lat == null) return Infinity;
     const dLat = (ray.landing_lat - targetLat) * toRad;
     const dLon = ((ray.landing_lon || 0) - targetLon) * toRad;
     const a = Math.sin(dLat / 2) ** 2 + Math.cos(targetLat * toRad) * Math.cos(ray.landing_lat * toRad) * Math.sin(dLon / 2) ** 2;
