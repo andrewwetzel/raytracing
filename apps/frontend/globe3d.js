@@ -167,7 +167,6 @@ export function updateGlobeRays(traceGroups, txLatDeg, txLonDeg, rxLatDeg, rxLon
     // RX marker if destination is set
     if (rxLatDeg != null && rxLonDeg != null && !isNaN(rxLatDeg) && !isNaN(rxLonDeg)) {
         createRxMarker(rxLatDeg, rxLonDeg);
-        createDirectionArc(txLat, txLon, rxLatDeg, rxLonDeg);
     }
 
     if (!traceGroups || traceGroups.length === 0) return;
@@ -192,7 +191,7 @@ export function updateGlobeRays(traceGroups, txLatDeg, txLonDeg, rxLatDeg, rxLon
             const material = new THREE.LineBasicMaterial({
                 color,
                 transparent: true,
-                opacity: group.color === '#10b981' ? 1.0 : 0.8,
+                opacity: group.opacity != null ? group.opacity : (group.color === '#10b981' ? 1.0 : 0.8),
                 linewidth: 1,
             });
             const line = new THREE.Line(geometry, material);
@@ -465,14 +464,14 @@ function createTxMarker(latDeg, lonDeg) {
     }
 
     // Glowing dot at base
-    const dotGeom = new THREE.SphereGeometry(0.012, 12, 12);
+    const dotGeom = new THREE.SphereGeometry(0.004, 8, 8);
     const dotMat = new THREE.MeshBasicMaterial({ color: 0x10b981 });
     const dot = new THREE.Mesh(dotGeom, dotMat);
     dot.position.copy(pos);
     txMarker.add(dot);
 
     // Pulsing ring at base
-    const pulseGeom = new THREE.RingGeometry(0.014, 0.018, 32);
+    const pulseGeom = new THREE.RingGeometry(0.005, 0.007, 32);
     const pulseMat = new THREE.MeshBasicMaterial({
         color: 0x10b981,
         transparent: true,
@@ -507,14 +506,14 @@ function createRxMarker(latDeg, lonDeg) {
     rxMarker.add(new THREE.Line(dishGeom, dishMat));
 
     // Glowing dot at base
-    const dotGeom = new THREE.SphereGeometry(0.012, 12, 12);
+    const dotGeom = new THREE.SphereGeometry(0.004, 8, 8);
     const dotMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
     const dot = new THREE.Mesh(dotGeom, dotMat);
     dot.position.copy(pos);
     rxMarker.add(dot);
 
     // Pulsing ring at base
-    const pulseGeom = new THREE.RingGeometry(0.014, 0.018, 32);
+    const pulseGeom = new THREE.RingGeometry(0.005, 0.007, 32);
     const pulseMat = new THREE.MeshBasicMaterial({
         color: 0xef4444,
         transparent: true,
@@ -536,7 +535,7 @@ function createLandingMarker(latDeg, lonDeg) {
     const pos = latLonAltToVec3(latDeg, lonDeg, 0);
 
     // Diamond shape using an octahedron
-    const diamondGeom = new THREE.OctahedronGeometry(0.015, 0);
+    const diamondGeom = new THREE.OctahedronGeometry(0.005, 0);
     const diamondMat = new THREE.MeshBasicMaterial({
         color: 0xf59e0b,  // amber/yellow
         transparent: true,
@@ -548,7 +547,7 @@ function createLandingMarker(latDeg, lonDeg) {
     landingMarker.add(diamond);
 
     // Pulsing ring
-    const ringGeom = new THREE.RingGeometry(0.016, 0.022, 32);
+    const ringGeom = new THREE.RingGeometry(0.006, 0.008, 32);
     const ringMat = new THREE.MeshBasicMaterial({
         color: 0xf59e0b,
         transparent: true,
@@ -564,86 +563,7 @@ function createLandingMarker(latDeg, lonDeg) {
     scene.add(landingMarker);
 }
 
-function createDirectionArc(txLat, txLon, rxLat, rxLon) {
-    arcGroup = new THREE.Group();
-
-    // 1. Calculate points along the great circle path
-    const numPoints = 64;
-    const points = [];
-
-    // Convert to radians for math
-    const lat1 = THREE.MathUtils.degToRad(txLat);
-    const lon1 = THREE.MathUtils.degToRad(txLon);
-    const lat2 = THREE.MathUtils.degToRad(rxLat);
-    const lon2 = THREE.MathUtils.degToRad(rxLon);
-
-    // Haversine distance for great circle length
-    const sl = Math.sin((lat2 - lat1) / 2);
-    const sd = Math.sin((lon2 - lon1) / 2);
-    const a = sl * sl + Math.cos(lat1) * Math.cos(lat2) * sd * sd;
-    const distanceRad = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-    if (distanceRad < 0.001) return; // Too close to draw meaningful arc
-
-    const maxAltitudeKm = Math.max(50, 400 * Math.sin(Math.min(distanceRad, Math.PI))); // Scaling arch relative to physical distance
-
-    for (let i = 0; i <= numPoints; i++) {
-        const f = i / numPoints;
-        const A = Math.sin((1 - f) * distanceRad) / Math.sin(distanceRad);
-        const B = Math.sin(f * distanceRad) / Math.sin(distanceRad);
-
-        const x = A * Math.cos(lat1) * Math.cos(lon1) + B * Math.cos(lat2) * Math.cos(lon2);
-        const y = A * Math.cos(lat1) * Math.sin(lon1) + B * Math.cos(lat2) * Math.sin(lon2);
-        const z = A * Math.sin(lat1) + B * Math.sin(lat2);
-
-        const latRad = Math.atan2(z, Math.sqrt(x * x + y * y));
-        const lonRad = Math.atan2(y, x);
-
-        // Arch altitude: parabolic trajectory mapping over the globe surface
-        const altKm = maxAltitudeKm * (1 - Math.pow(2 * f - 1, 2));
-
-        points.push(latLonAltToVec3(
-            THREE.MathUtils.radToDeg(latRad),
-            THREE.MathUtils.radToDeg(lonRad),
-            altKm
-        ));
-    }
-
-    // 2. Draw dashed line connecting points
-    const arcGeom = new THREE.BufferGeometry().setFromPoints(points);
-    const arcMat = new THREE.LineDashedMaterial({
-        color: 0xf59e0b, // High visibility Amber
-        linewidth: 1,
-        dashSize: 0.02,
-        gapSize: 0.02,
-        transparent: true,
-        opacity: 0.8
-    });
-
-    const line = new THREE.Line(arcGeom, arcMat);
-    line.computeLineDistances(); // Required for material dot-dashing calculation native to ThreeJS
-    arcGroup.add(line);
-
-    // 3. Add directional arrowhead at the 75% mark along the line
-    const arrowIdx = Math.floor(numPoints * 0.75);
-    const p1 = points[arrowIdx - 1];
-    const p2 = points[arrowIdx];
-
-    const dir = new THREE.Vector3().subVectors(p2, p1).normalize();
-    const arrowGeom = new THREE.ConeGeometry(0.006, 0.018, 6);
-    arrowGeom.rotateX(Math.PI / 2); // Cone points up (+Y), rotate to face vector pathing
-
-    const arrowMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b });
-    const arrowMesh = new THREE.Mesh(arrowGeom, arrowMat);
-
-    arrowMesh.position.copy(p2);
-
-    const target = new THREE.Vector3().copy(p2).add(dir);
-    arrowMesh.lookAt(target);
-
-    arcGroup.add(arrowMesh);
-    scene.add(arcGroup);
-}
+// Direction arc removed — rays themselves show the path
 
 function onGlobeClickInternal(event) {
     if (!earthMesh || !raycaster || !camera) return;

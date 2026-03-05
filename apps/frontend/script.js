@@ -1430,212 +1430,273 @@ function wireModeSwitching() {
 
 
 async function targetBisection() {
-  if (isTargeting) return;
-  isTargeting = true;
+    if (isTargeting) return;
+    isTargeting = true;
 
-  const btn = document.getElementById('target-btn');
-  const stopBtn = document.getElementById('target-stop-btn');
-  btn.classList.add('loading');
-  btn.querySelector('.btn-icon').textContent = '⟳';
-  btn.querySelector('.btn-label').textContent = 'Solving...';
-  stopBtn.style.display = 'flex';
-  stopTargeting = false;
+    const btn = document.getElementById('target-btn');
+    const stopBtn = document.getElementById('target-stop-btn');
+    btn.classList.add('loading');
+    btn.querySelector('.btn-icon').textContent = '⟳';
+    btn.querySelector('.btn-label').textContent = 'Sweeping...';
+    stopBtn.style.display = 'flex';
+    stopTargeting = false;
 
-  const tolerance = parseFloat(document.getElementById('target-tolerance').value);
-  const maxHops = parseInt(document.getElementById('max-hops')?.value || '1');
-  const searchLo = parseFloat(document.getElementById('target-search-min').value);
-  const searchHi = parseFloat(document.getElementById('target-search-max').value);
+    const tolerance = parseFloat(document.getElementById('target-tolerance').value);
+    const maxHops = parseInt(document.getElementById('max-hops')?.value || '1');
+    const searchLo = parseFloat(document.getElementById('target-search-min').value);
+    const searchHi = parseFloat(document.getElementById('target-search-max').value);
+    const maxIter = parseInt(document.getElementById('target-max-iter')?.value || '20');
 
-  const logBody = document.getElementById('target-log-body');
-  logBody.innerHTML = `<div class="target-log-row header"><span>#</span><span>Elev / Az</span><span>Range</span><span>Error</span><span>Landing</span></div>`;
+    const logBody = document.getElementById('target-log-body');
+    logBody.innerHTML = '<div class="target-log-row header"><span>#</span><span>Elev / Az</span><span>Range</span><span>Error</span><span>Landing</span></div>';
 
-  traceGroups = [];
+    traceGroups = [];
 
-  // Determine target: use RX lat/lon if set, otherwise compute from target-range
-  let targetLat, targetLon;
-  const rxLat = getRxLat();
-  const rxLon = getRxLon();
-  const txLat = getTxLat();
-  const txLon = getTxLon();
+    // Determine target: use RX lat/lon if set, otherwise compute from target-range
+    let targetLat, targetLon;
+    const rxLat = getRxLat();
+    const rxLon = getRxLon();
+    const txLat = getTxLat();
+    const txLon = getTxLon();
 
-  if (rxLat !== null && rxLon !== null) {
-    // RX destination is set — compute target relative coordinates
-    targetLat = rxLat;
-    targetLon = rxLon - txLon; // relative longitude
-  } else {
-    // Fallback: use target-range to estimate a target lat along the azimuth
-    const targetRange = parseFloat(document.getElementById('target-range').value);
-    const az = getAzimuth();
-    const R = 6371;
+    if (rxLat !== null && rxLon !== null) {
+        targetLat = rxLat;
+        targetLon = rxLon - txLon;
+    } else {
+        const targetRange = parseFloat(document.getElementById('target-range').value);
+        const az = getAzimuth();
+        const R = 6371;
+        const toRad2 = Math.PI / 180;
+        const d = targetRange / R;
+        const p1 = txLat * toRad2;
+        const l1 = 0;
+        const t1 = az * toRad2;
+        targetLat = Math.asin(Math.sin(p1) * Math.cos(d) + Math.cos(p1) * Math.sin(d) * Math.cos(t1)) / toRad2;
+        targetLon = (l1 + Math.atan2(Math.sin(t1) * Math.sin(d) * Math.cos(p1), Math.cos(d) - Math.sin(p1) * Math.sin(targetLat * toRad2))) / toRad2;
+        targetMarkerRange = targetRange;
+    }
+
+    // Compute target ground range for signed error
     const toRad = Math.PI / 180;
-    const d = targetRange / R;
-    const φ1 = txLat * toRad;
-    const λ1 = 0; // relative longitude
-    const θ = az * toRad;
-    targetLat = Math.asin(Math.sin(φ1) * Math.cos(d) + Math.cos(φ1) * Math.sin(d) * Math.cos(θ)) / toRad;
-    targetLon = (λ1 + Math.atan2(Math.sin(θ) * Math.sin(d) * Math.cos(φ1), Math.cos(d) - Math.sin(φ1) * Math.sin(targetLat * toRad))) / toRad;
-    targetMarkerRange = targetRange;
-  }
+    const targetRangeKm = (() => {
+        const dLat = (targetLat - txLat) * toRad;
+        const dLon = targetLon * toRad;
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos(txLat * toRad) * Math.cos(targetLat * toRad) * Math.sin(dLon / 2) ** 2;
+        return 2 * 6371 * Math.asin(Math.sqrt(a));
+    })();
 
-  // Always bisect elevation, use freq from unified params
-  const baseFreq = parseFloat(document.getElementById('target-freq-min').value);
-  const baseAz = getAzimuth();
+    const baseFreq = parseFloat(document.getElementById('target-freq-min').value);
+    const baseAz = getAzimuth();
+    const rayMode = parseFloat(getCheckedValues('ray-mode-group', true)[0] || -1);
 
-  // solve_target_wasm uses serde enum deserialization → needs string variant names
-  const ED_MODELS = ['Chapman', 'Elect1', 'Linear', 'QuasiParabolic', 'VarChapman', 'DualChapman'];
-  const MAG_MODELS = ['Dipole', 'Constant', 'Cubic', 'Igrf14'];
-  const COL_MODELS = ['DoubleExponential', 'Constant', 'SingleExponential'];
-  const RI_MODELS = ['Full', 'NoFieldNoCollisions', 'NoFieldWithCollisions', 'WithFieldNoCollisions'];
-  const PERT_MODELS = ['None', 'Torus', 'Trough', 'Shock', 'Bulge', 'Exponential'];
+    // Build trace config for trace_fan_wasm (uses integer model IDs)
+    const traceBase = {
+        freq_mhz: baseFreq,
+        ray_mode: rayMode,
+        azimuth_deg: baseAz,
+        tx_lat_deg: txLat,
+        fc: parseFloat(document.getElementById('target-fc-min').value),
+        hm: parseFloat(document.getElementById('target-hm-min').value),
+        sh: parseFloat(document.getElementById('target-sh-min').value),
+        fh: parseFloat(document.getElementById('fh').value),
+        step_size: 1.0,
+        max_steps: 2000,
+        max_hops: maxHops,
+        ed_model: parseInt(getCheckedValues('ed-model-group')[0] || 0),
+        mag_model: parseInt(getCheckedValues('mag-model-group')[0] || 0),
+        rindex_model: parseInt(getCheckedValues('rindex-model-group')[0] || 0),
+        pert_model: parseInt(getCheckedValues('pert-model-group')[0] || 0),
+    };
 
-  const solverConfig = {
-    target_lat_deg: targetLat,
-    target_lon_deg: targetLon,
-    tx_lat_deg: txLat,
-    freq_mhz: baseFreq,
-    azimuth_deg: baseAz,
-    ray_mode: parseFloat(getCheckedValues('ray-mode-group', true)[0] || -1),
-    elev_min: searchLo,
-    elev_max: searchHi,
-    coarse_step: 2.0,
-    error_limit_km: tolerance,
-    max_bisect_iters: 30,
-    max_nm_iters: 100,
-    max_hops: maxHops,
-    step_size: 1.0,
-    max_steps: 2000,
-    include_ray_path: true,
-    params: {
-      earth_r: 6370.0,
-      ed_model: ED_MODELS[parseInt(getCheckedValues('ed-model-group')[0] || 0)],
-      mag_model: MAG_MODELS[parseInt(getCheckedValues('mag-model-group')[0] || 0)],
-      col_model: COL_MODELS[0],
-      rindex_model: RI_MODELS[parseInt(getCheckedValues('rindex-model-group')[0] || 0)],
-      pert_model: PERT_MODELS[parseInt(getCheckedValues('pert-model-group')[0] || 0)],
-      fc: parseFloat(document.getElementById('target-fc-min').value),
-      hm: parseFloat(document.getElementById('target-hm-min').value),
-      sh: parseFloat(document.getElementById('target-sh-min').value),
-      alpha: 0.5,
-      ed_a: 0.0, ed_b: 0.0, ed_c: 0.0, ed_e: 0.0,
-      ym: 100.0,
-      fc2: 0.0, hm2: 0.0, sh2: 0.0,
-      chi: 3.0,
-      fh: parseFloat(document.getElementById('fh').value),
-      dip: 0.0,
-      epoch_year: 2025.0,
-      nu1: 1050000.0, h1: 100.0, a1: 0.148,
-      nu2: 30.0, h2: 140.0, a2: 0.0183,
-      p1: 0.0, p2: 0.0, p3: 0.0, p4: 0.0, p5: 0.0,
-      p6: 0.0, p7: 0.0, p8: 0.0, p9: 0.0,
-    },
-  };
+    let totalRays = 0;
+    let rayIdx = 0;
 
-  // Yield to UI
-  await new Promise(r => setTimeout(r, 10));
+    // Helper: trace a single ray at given elevation
+    function traceSingleRay(elev) {
+        const body = Object.assign({}, traceBase, { elev_min: elev, elev_max: elev, elev_step: 1.0 });
+        try {
+            const data = JSON.parse(trace_fan_wasm(JSON.stringify(body)));
+            totalRays++;
+            if (data.rays && data.rays.length > 0) return data.rays[0];
+        } catch (e) { console.error('trace error:', e); }
+        return null;
+    }
 
-  let result;
-  try {
-    const resultJson = solve_target_wasm(JSON.stringify(solverConfig));
-    result = JSON.parse(resultJson);
-  } catch (err) {
-    console.error('Target solver error:', err);
-    logBody.innerHTML += `<div class="target-log-row escape"><span>—</span><span colspan="4">⚠ Solver failed: ${err.message || err}</span></div>`;
+    // Helper: compute signed range error (positive = overshot)
+    function signedError(ray) {
+        if (!ray || !ray.ground) return null;
+        return ray.range_km - targetRangeKm;
+    }
+
+    // Helper: compute great-circle error from target
+    function gcError(ray) {
+        if (!ray || !ray.ground || ray.landing_lat == null) return Infinity;
+        const dLat = (ray.landing_lat - targetLat) * toRad;
+        const dLon = ((ray.landing_lon || 0) - targetLon) * toRad;
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos(targetLat * toRad) * Math.cos(ray.landing_lat * toRad) * Math.sin(dLon / 2) ** 2;
+        return 2 * 6371 * Math.asin(Math.sqrt(a));
+    }
+
+    // Helper: add a ray to the display
+    function addRayGroup(ray, elev, color, opacity, label) {
+        if (!ray || !ray.pts || ray.pts.length < 2) return;
+        traceGroups.push({
+            label: label || (elev.toFixed(1) + ' deg'),
+            color: color,
+            opacity: opacity,
+            rays: [ray],
+            config: traceBase,
+        });
+    }
+
+    // Helper: fade all existing non-final rays
+    function fadeOldRays() {
+        for (let i = 0; i < traceGroups.length; i++) {
+            if (traceGroups[i].color !== '#10b981') {
+                traceGroups[i].opacity = Math.min(traceGroups[i].opacity || 0.6, 0.12);
+                traceGroups[i].color = '#475569';
+            }
+        }
+    }
+
+    // Helper: update visuals
+    async function refreshDisplay() {
+        render();
+        if (viewMode === '3d') updateGlobeRays(traceGroups, getTxLat(), getTxLon(), getRxLat(), getRxLon());
+        updateLegend();
+        await new Promise(function (r) { setTimeout(r, 5); });
+    }
+
+    // Helper: log a ray
+    function logRay(ray, elev) {
+        rayIdx++;
+        const err = gcError(ray);
+        const rangeStr = (ray && ray.ground) ? (ray.range_km.toFixed(1) + ' km') : 'escape';
+        const errStr = err < Infinity ? (err.toFixed(1) + ' km') : '—';
+        const landStr = (ray && ray.landing_lat != null) ? (ray.landing_lat.toFixed(2) + ', ' + (ray.landing_lon || 0).toFixed(2) + ' deg') : '—';
+        const cls = err <= tolerance ? 'success' : ((ray && ray.ground) ? 'fail' : 'escape');
+        logBody.innerHTML += '<div class="target-log-row ' + cls + '"><span>' + rayIdx + '</span><span>' + elev.toFixed(2) + ' / ' + baseAz.toFixed(1) + '</span><span>' + rangeStr + '</span><span>' + errStr + '</span><span>' + landStr + '</span></div>';
+        logBody.scrollTop = logBody.scrollHeight;
+    }
+
+    // ========== PHASE 1: Coarse sweep ==========
+    const coarseStep = 2.0;
+    const sweepResults = [];
+
+    for (let e = searchLo; e <= searchHi + 0.01; e += coarseStep) {
+        if (stopTargeting) break;
+        const ray = traceSingleRay(e);
+        const sErr = signedError(ray);
+        sweepResults.push({ elev: e, ray: ray, signedErr: sErr });
+
+        if (ray && ray.pts && ray.pts.length >= 2) {
+            addRayGroup(ray, e, '#475569', 0.25, 'sweep ' + e.toFixed(1) + ' deg');
+            logRay(ray, e);
+        }
+
+        btn.querySelector('.btn-label').textContent = 'Sweep ' + e.toFixed(0) + ' deg';
+        await refreshDisplay();
+    }
+
+    // ========== PHASE 2: Identify brackets ==========
+    const brackets = [];
+    for (let i = 0; i < sweepResults.length - 1; i++) {
+        const a = sweepResults[i], b = sweepResults[i + 1];
+        if (a.signedErr != null && b.signedErr != null && a.signedErr * b.signedErr < 0) {
+            brackets.push({ lo: a.elev, hi: b.elev, errLo: a.signedErr, errHi: b.signedErr });
+        }
+    }
+
+    // ========== PHASE 3: Bisection ==========
+    let bestRay = null, bestElev = 0, bestErr = Infinity;
+
+    for (const bracket of brackets) {
+        if (stopTargeting) break;
+        let lo = bracket.lo, hi = bracket.hi, errLo = bracket.errLo;
+
+        btn.querySelector('.btn-label').textContent = 'Bisecting...';
+
+        for (let iter = 0; iter < maxIter; iter++) {
+            if (stopTargeting) break;
+            const mid = (lo + hi) / 2;
+            const ray = traceSingleRay(mid);
+            const sErr = signedError(ray);
+            const err = gcError(ray);
+
+            if (ray && ray.pts && ray.pts.length >= 2) {
+                fadeOldRays();
+                const isClose = err <= tolerance;
+                addRayGroup(ray, mid,
+                    isClose ? '#10b981' : '#f59e0b',
+                    isClose ? 1.0 : 0.7,
+                    'bisect ' + mid.toFixed(2) + ' deg (err ' + err.toFixed(1) + ' km)'
+                );
+                logRay(ray, mid);
+            }
+
+            if (err < bestErr) {
+                bestErr = err;
+                bestRay = ray;
+                bestElev = mid;
+            }
+
+            if (err <= tolerance) break;
+
+            if (sErr != null && sErr * errLo < 0) {
+                hi = mid;
+            } else {
+                lo = mid;
+                errLo = sErr;
+            }
+
+            if (Math.abs(hi - lo) < 0.001) break;
+
+            btn.querySelector('.btn-label').textContent = 'Bisect ' + (iter + 1) + '/' + maxIter;
+            await refreshDisplay();
+        }
+    }
+
+    // ========== PHASE 4: Final result ==========
+    fadeOldRays();
+
+    if (bestRay && bestRay.pts && bestRay.pts.length >= 2) {
+        addRayGroup(bestRay, bestElev, '#10b981', 1.0,
+            'Best ' + bestElev.toFixed(2) + ' deg -> ' + (bestRay.range_km || 0).toFixed(0) + ' km (err ' + bestErr.toFixed(1) + ')'
+        );
+    }
+
+    // Show solver stats
+    const summary = document.getElementById('target-range-summary');
+    summary.style.display = 'block';
+
+    const found = bestErr <= tolerance;
+    document.getElementById('fan-range-min').textContent = (bestRay && bestRay.range_km) ? (bestRay.range_km.toFixed(0) + ' km') : '—';
+    document.getElementById('fan-range-max').textContent = (bestRay && bestRay.range_km) ? (bestRay.range_km.toFixed(0) + ' km') : '—';
+    document.getElementById('fan-returned-count').textContent = found ? '1' : '0';
+    document.getElementById('fan-escaped-count').textContent = totalRays.toString();
+
+    const hintEl = document.getElementById('fan-range-hint');
+    if (found) {
+        hintEl.textContent = 'Best: ' + bestElev.toFixed(2) + ' deg elev -> error ' + bestErr.toFixed(1) + ' km (' + totalRays + ' rays)';
+        hintEl.className = 'range-hint good';
+        targetMarkerRange = bestRay.range_km;
+    } else {
+        hintEl.textContent = 'No solution within ' + tolerance + ' km tolerance. ' + totalRays + ' rays traced.';
+        hintEl.className = 'range-hint';
+    }
+
+    document.getElementById('stat-rays').textContent = totalRays + ' rays';
+    document.getElementById('stat-time').textContent = found ? 'found' : 'not found';
+
     btn.classList.remove('loading');
     btn.querySelector('.btn-icon').textContent = '🎯';
     btn.querySelector('.btn-label').textContent = 'Find Path';
     stopBtn.style.display = 'none';
     isTargeting = false;
-    return;
-  }
+    stopTargeting = false;
 
-  if (result.error) {
-    logBody.innerHTML += `<div class="target-log-row escape"><span>—</span><span colspan="4">⚠ ${result.error}</span></div>`;
-  }
-
-  // Display solutions
-  const solutions = result.solutions || [];
-  const found = solutions.length > 0;
-
-  for (let i = 0; i < solutions.length; i++) {
-    const sol = solutions[i];
-    const isBest = i === 0;
-    const rowClass = sol.error_km <= tolerance ? 'success' : 'fail';
-    const landingStr = `${sol.landing_lat_deg.toFixed(2)}°, ${sol.landing_lon_deg.toFixed(2)}°`;
-    logBody.innerHTML += `<div class="target-log-row ${rowClass}"><span>${i + 1}</span><span>${sol.elevation_deg.toFixed(2)}° / ${sol.azimuth_deg.toFixed(1)}°</span><span>${sol.range_km.toFixed(1)} km</span><span>${sol.error_km.toFixed(1)} km</span><span>${landingStr}</span></div>`;
-
-    // Build trace group from ray path for visualization
-    if (sol.ray_path && sol.ray_path.length > 0) {
-      const pts = sol.ray_path.map(pt => ({
-        h: pt.height_km,
-        t: pt.t,
-        range: pt.ground_range_km,
-      }));
-      const fakeRay = {
-        elev: sol.elevation_deg,
-        max_h: sol.max_height_km,
-        ground: true,
-        range_km: sol.range_km,
-        hops: sol.hops,
-        absorption: sol.absorption,
-        landing_lat: sol.landing_lat_deg,
-        landing_lon: sol.landing_lon_deg,
-        pts,
-      };
-      traceGroups.push({
-        label: isBest
-          ? `✅ ${sol.elevation_deg.toFixed(1)}° → ${sol.range_km.toFixed(0)} km (err ${sol.error_km.toFixed(1)})`
-          : `${sol.elevation_deg.toFixed(1)}° → ${sol.range_km.toFixed(0)} km`,
-        color: isBest ? '#10b981' : '#6366f1',
-        rays: [fakeRay],
-        config: solverConfig,
-      });
-    }
-  }
-
-  // Show solver stats
-  const summary = document.getElementById('target-range-summary');
-  summary.style.display = 'block';
-  document.getElementById('fan-range-min').textContent = solutions.length > 0 ? `${Math.min(...solutions.map(s => s.range_km)).toFixed(0)} km` : '—';
-  document.getElementById('fan-range-max').textContent = solutions.length > 0 ? `${Math.max(...solutions.map(s => s.range_km)).toFixed(0)} km` : '—';
-  document.getElementById('fan-returned-count').textContent = `${solutions.length}`;
-  document.getElementById('fan-escaped-count').textContent = `${result.rays_traced || 0}`;
-
-  const hintEl = document.getElementById('fan-range-hint');
-  if (found) {
-    const best = solutions[0];
-    hintEl.textContent = `✅ Best: ${best.elevation_deg.toFixed(2)}° elev, ${best.azimuth_deg.toFixed(1)}° az → error ${best.error_km.toFixed(1)} km (${result.rays_traced} rays in ${(result.elapsed_ms || 0).toFixed(0)} ms)`;
-    hintEl.className = 'range-hint good';
-  } else {
-    hintEl.textContent = `⚠ No solution within ${tolerance} km tolerance. ${result.rays_traced} rays traced.`;
-    hintEl.className = 'range-hint';
-  }
-
-  logBody.scrollTop = logBody.scrollHeight;
-
-  // Update stats header
-  document.getElementById('stat-rays').textContent = `${result.rays_traced || 0} rays`;
-  document.getElementById('stat-time').textContent = found
-    ? `✅ ${(result.elapsed_ms || 0).toFixed(0)} ms`
-    : '⚠ not found';
-
-  // Update target marker
-  if (found) {
-    targetMarkerRange = solutions[0].range_km;
-  }
-
-  btn.classList.remove('loading');
-  btn.querySelector('.btn-icon').textContent = '🎯';
-  btn.querySelector('.btn-label').textContent = 'Find Path';
-  stopBtn.style.display = 'none';
-  isTargeting = false;
-  stopTargeting = false;
-
-  render();
-  if (viewMode === '3d') {
-    updateGlobeRays(traceGroups, getTxLat(), getTxLon(), getRxLat(), getRxLon());
-  }
-  updateLegend();
-  serializeStateToUrl();
+    await refreshDisplay();
+    serializeStateToUrl();
 }
 
 
