@@ -25,6 +25,10 @@ pub(crate) struct IntegratorState {
     pub e2max: f64,
     pub e2min: f64,
     pub fact: f64,
+    /// Set to true if any state variable becomes NaN or infinite.
+    pub diverged: bool,
+    /// Number of consecutive step halvings (capped at 10 to prevent runaway).
+    pub halvings: u8,
 }
 
 impl IntegratorState {
@@ -57,6 +61,8 @@ impl IntegratorState {
             e2max,
             e2min,
             fact: if fact <= 0.0 { 0.5 } else { fact },
+            diverged: false,
+            halvings: 0,
         };
         if mode == 1 {
             s.mm = 4;
@@ -68,6 +74,7 @@ impl IntegratorState {
 }
 
 pub(crate) fn rk4_step(s: &mut IntegratorState, freq_mhz: f64, ray_mode: f64, p: &ModelParams) {
+    if s.diverged { return; }
     let bet = [0.5, 0.5, 1.0, 0.0];
     let mut dely = [[0.0f64; NN]; 4];
     let mm = s.mm;
@@ -92,6 +99,12 @@ pub(crate) fn rk4_step(s: &mut IntegratorState, freq_mhz: f64, ray_mode: f64, p:
     s.y = s.yu[s.mm];
     s.t = s.xv[s.mm];
 
+    // NaN/Inf guard
+    if !s.y.iter().all(|v| v.is_finite()) {
+        s.diverged = true;
+        return;
+    }
+
     let (d, _, _, _, _) = hamltn(&s.y, freq_mhz, ray_mode, p, false);
     s.dydt = d;
 
@@ -102,8 +115,9 @@ pub(crate) fn rk4_step(s: &mut IntegratorState, freq_mhz: f64, ray_mode: f64, p:
 
     s.fv[s.mm] = d;
 
+    // Warmup phase: caller's loop handles mm < 4 by calling rk4_step again.
+    // No recursive call here to avoid potential stack overflow.
     if s.mm <= 3 {
-        rk4_step(s, freq_mhz, ray_mode, p);
         return;
     }
 
@@ -111,6 +125,7 @@ pub(crate) fn rk4_step(s: &mut IntegratorState, freq_mhz: f64, ray_mode: f64, p:
 }
 
 pub(crate) fn am_step(s: &mut IntegratorState, freq_mhz: f64, ray_mode: f64, p: &ModelParams) {
+    if s.diverged { return; }
     let mut dely1 = [0.0f64; NN];
 
     // Predictor (Adams-Bashforth)
@@ -156,10 +171,12 @@ pub(crate) fn am_step(s: &mut IntegratorState, freq_mhz: f64, ray_mode: f64, p: 
     }
 
     if s.e1max <= sse {
-        if s.step.abs() <= s.e2min {
+        if s.step.abs() <= s.e2min || s.halvings >= 10 {
+            s.halvings = 0;
             exit_routine(s);
             return;
         }
+        s.halvings += 1;
         s.ll = 1;
         s.mm = 1;
         s.step *= s.fact;
@@ -263,7 +280,10 @@ mod tests {
     #[test]
     fn test_am_step_after_warmup() {
         let (mut s, p) = init_state();
-        rk4_step(&mut s, 10.0, -1.0, &p);
+        // Warmup: rk4_step no longer recurses, caller must loop
+        while s.mm < 4 {
+            rk4_step(&mut s, 10.0, -1.0, &p);
+        }
         assert_eq!(s.mm, 4, "mm should be 4 after warmup");
         assert!(s.t > 0.0);
     }

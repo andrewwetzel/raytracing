@@ -176,6 +176,8 @@ pub struct TargetResult {
     pub elapsed_ms: f64,
     /// Total number of rays traced during the solve.
     pub rays_traced: usize,
+    /// Diagnostic status message (e.g. "ok", "no_brackets", "no_convergence").
+    pub status: String,
 }
 
 // ============================================================
@@ -255,6 +257,7 @@ fn fire_ray(
     let mut returned = false;
     let mut hops: u8 = 0;
     let mut cur_lat = tx_lat;
+    let mut lon_offset = 0.0f64;
     let mut landing_lat = 0.0f64;
     let mut landing_lon = 0.0f64;
     let mut all_pts: Vec<TracePoint> = Vec::new();
@@ -293,17 +296,18 @@ fn fire_ray(
 
             if let Some(last) = result.points.last() {
                 landing_lat = last.lat_deg;
-                landing_lon = last.lon_deg;
+                landing_lon = last.lon_deg + lon_offset;
                 total_absorption += last.absorption;
                 total_group = last.group_path;
                 total_phase = last.phase_path;
                 cur_lat = last.lat_deg;
                 hop_landings.push(HopLanding {
                     lat: last.lat_deg,
-                    lon: last.lon_deg,
+                    lon: last.lon_deg + lon_offset,
                     range_km: total_range,
                     absorption: total_absorption,
                 });
+                lon_offset += last.lon_deg;
             }
 
             if _hop >= config.max_hops - 1 {
@@ -568,24 +572,7 @@ fn bisect_elevation(
                     config.tx_lat_deg,
                 );
                 // Find best hop gc distance for abs_err
-                let abs_err = {
-                    let mut best = f64::INFINITY;
-                    for hop in &o.hop_landings {
-                        let d = haversine_km(
-                            hop.lat, hop.lon,
-                            config.target_lat_deg, config.target_lon_deg,
-                        );
-                        if d < best { best = d; }
-                    }
-                    if best == f64::INFINITY {
-                        haversine_km(
-                            o.landing_lat, o.landing_lon,
-                            config.target_lat_deg, config.target_lon_deg,
-                        )
-                    } else {
-                        best
-                    }
-                };
+                let abs_err = best_hop_gc_error(&o, config);
 
                 if abs_err < best_abs_err {
                     best_abs_err = abs_err;
@@ -606,8 +593,14 @@ fn bisect_elevation(
                 }
             }
             _ => {
-                // Ray didn't return; try shrinking from the non-returning side
-                hi = mid;
+                // Ray didn't return — shrink from the escape-boundary side.
+                // If err_lo is the escape sentinel (1e6), the low side escaped,
+                // so raise lo. Otherwise the high side escaped, so lower hi.
+                if err_lo.abs() > 1e5 {
+                    lo = mid;
+                } else {
+                    hi = mid;
+                }
             }
         }
 
@@ -643,20 +636,7 @@ fn nelder_mead_2d(
         let elev_clamped = elev.clamp(config.elev_min, config.elev_max);
         match fire_ray(freq, config.ray_mode, elev_clamped, az, config.tx_lat_deg, config, false) {
             Some(o) if o.returned => {
-                let mut best_dist = f64::INFINITY;
-                for hop in &o.hop_landings {
-                    let d = haversine_km(
-                        hop.lat, hop.lon,
-                        config.target_lat_deg, config.target_lon_deg,
-                    );
-                    if d < best_dist { best_dist = d; }
-                }
-                if best_dist == f64::INFINITY {
-                    best_dist = haversine_km(
-                        o.landing_lat, o.landing_lon,
-                        config.target_lat_deg, config.target_lon_deg,
-                    );
-                }
+                let best_dist = best_hop_gc_error(&o, config);
                 (best_dist, Some(o))
             }
             _ => (1e9, None), // penalty for non-returning rays
@@ -754,6 +734,23 @@ fn nelder_mead_2d(
 /// Returns all solutions within `error_limit_km`, sorted by ascending error.
 #[tracing::instrument(skip(config), level = "info")]
 pub fn solve_target(config: &TargetConfig) -> Result<TargetResult, TraceError> {
+    // Input validation
+    if config.elev_min > config.elev_max {
+        return Err(TraceError::InvalidElevation(config.elev_min));
+    }
+    if config.coarse_step <= 0.0 {
+        return Err(TraceError::InvalidStepSize(config.coarse_step));
+    }
+    if config.error_limit_km <= 0.0 {
+        return Err(TraceError::InvalidStepSize(config.error_limit_km));
+    }
+    if config.step_size <= 0.0 {
+        return Err(TraceError::InvalidStepSize(config.step_size));
+    }
+    if config.max_steps == 0 {
+        return Err(TraceError::InvalidMaxSteps(config.max_steps));
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     let start = std::time::Instant::now();
 
@@ -814,7 +811,7 @@ pub fn solve_target(config: &TargetConfig) -> Result<TargetResult, TraceError> {
     #[cfg(target_arch = "wasm32")]
     let iter = search_combos.iter();
 
-    let combo_results: Vec<(Vec<TargetSolution>, usize)> = iter
+    let combo_results: Vec<(Vec<TargetSolution>, usize, usize)> = iter
         .map(|&(freq, az)| {
             let mut rays = 0usize;
             let mut solutions = Vec::new();
@@ -841,8 +838,8 @@ pub fn solve_target(config: &TargetConfig) -> Result<TargetResult, TraceError> {
                         } else {
                             (elev, az, outcome, error)
                         }
-                    } else {
-                        // Already within tolerance, but still try a quick polish
+                    } else if error > config.error_limit_km * 0.5 {
+                        // Within tolerance but could be improved — try a quick polish
                         if let Some((nm_elev, nm_az, nm_outcome)) =
                             nelder_mead_2d(freq, elev, az, config, &mut rays)
                         {
@@ -855,6 +852,9 @@ pub fn solve_target(config: &TargetConfig) -> Result<TargetResult, TraceError> {
                         } else {
                             (elev, az, outcome, error)
                         }
+                    } else {
+                        // Well within tolerance (< 50% of limit), skip polish
+                        (elev, az, outcome, error)
                     };
 
                     if final_error <= config.error_limit_km {
@@ -893,13 +893,15 @@ pub fn solve_target(config: &TargetConfig) -> Result<TargetResult, TraceError> {
                 }
             }
 
-            (solutions, rays)
+            (solutions, rays, brackets.len())
         })
         .collect();
 
-    for (solutions, rays) in combo_results {
+    let mut total_brackets: usize = 0;
+    for (solutions, rays, n_brackets) in combo_results {
         all_solutions.extend(solutions);
         total_rays += rays;
+        total_brackets += n_brackets;
     }
 
     // Sort by error ascending
@@ -927,10 +929,19 @@ pub fn solve_target(config: &TargetConfig) -> Result<TargetResult, TraceError> {
         "Target solve complete"
     );
 
+    let status = if !all_solutions.is_empty() {
+        "ok".to_string()
+    } else if total_brackets == 0 {
+        "no_brackets".to_string()
+    } else {
+        "no_convergence".to_string()
+    };
+
     Ok(TargetResult {
         solutions: all_solutions,
         best,
         elapsed_ms,
         rays_traced: total_rays,
+        status,
     })
 }

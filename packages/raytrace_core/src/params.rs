@@ -270,6 +270,30 @@ impl ModelParams {
     pub fn builder() -> ModelParamsBuilder {
         ModelParamsBuilder::default()
     }
+
+    /// Validate these parameters for physical reasonableness.
+    ///
+    /// Returns `Ok(())` if valid, or a descriptive error string.
+    /// This does not check model-specific parameter combinations,
+    /// only basic sanity of the core fields.
+    pub fn validate(&self) -> Result<(), String> {
+        if self.earth_r <= 0.0 {
+            return Err(format!("earth_r must be positive, got {}", self.earth_r));
+        }
+        if self.fc < 0.0 {
+            return Err(format!("fc (foF2) must be non-negative, got {}", self.fc));
+        }
+        if self.hm < 0.0 {
+            return Err(format!("hm (hmF2) must be non-negative, got {}", self.hm));
+        }
+        if self.sh < 0.0 {
+            return Err(format!("sh (scale height) must be non-negative, got {}", self.sh));
+        }
+        if self.fh < 0.0 {
+            return Err(format!("fh (gyrofrequency) must be non-negative, got {}", self.fh));
+        }
+        Ok(())
+    }
 }
 
 impl Default for ModelParams {

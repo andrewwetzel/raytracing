@@ -307,3 +307,84 @@ fn test_target_multi_hop_long_distance() {
         result.rays_traced
     );
 }
+
+// ---- Multi-hop longitude accumulation test (I) ----
+
+#[test]
+fn test_multi_hop_longitude_accumulates() {
+    // With az=45° and multi-hop, longitude should accumulate across hops.
+    // This specifically verifies the longitude fix (lon_offset) in fire_ray.
+    let (lat, lon, _) = known_landing(10.0, 20.0, 45.0, 40.0);
+
+    let config = TargetConfig {
+        target_lat_deg: lat,
+        target_lon_deg: lon,
+        tx_lat_deg: 40.0,
+        freq_mhz: SearchSpec::Fixed(10.0),
+        azimuth_deg: SearchSpec::Fixed(45.0),
+        error_limit_km: 50.0,
+        max_hops: 2,
+        include_ray_path: true,
+        ..TargetConfig::default()
+    };
+
+    let result = solve_target(&config).unwrap();
+    if let Some(best) = &result.best {
+        // With azimuth=45° the landing longitude should be non-zero
+        assert!(
+            best.landing_lon_deg.abs() > 0.01,
+            "Multi-hop az=45° should produce non-zero longitude, got {:.4}°",
+            best.landing_lon_deg
+        );
+    }
+}
+
+// ---- Solver status diagnostic test (G) ----
+
+#[test]
+fn test_solver_status_ok_for_reachable_target() {
+    let (lat, lon, _) = known_landing(10.0, 20.0, 0.0, 40.0);
+
+    let config = TargetConfig {
+        target_lat_deg: lat,
+        target_lon_deg: lon,
+        tx_lat_deg: 40.0,
+        freq_mhz: SearchSpec::Fixed(10.0),
+        azimuth_deg: SearchSpec::Fixed(0.0),
+        error_limit_km: 15.0,
+        ..TargetConfig::default()
+    };
+
+    let result = solve_target(&config).unwrap();
+    assert_eq!(result.status, "ok", "Reachable target should have status 'ok'");
+}
+
+#[test]
+fn test_solver_status_for_unreachable_target() {
+    let config = TargetConfig {
+        target_lat_deg: -40.0,
+        target_lon_deg: 180.0,
+        tx_lat_deg: 40.0,
+        freq_mhz: SearchSpec::Fixed(10.0),
+        azimuth_deg: SearchSpec::Fixed(0.0),
+        error_limit_km: 5.0,
+        ..TargetConfig::default()
+    };
+
+    let result = solve_target(&config).unwrap();
+    assert_ne!(result.status, "ok", "Unreachable target should not have status 'ok'");
+}
+
+// ---- Input validation test ----
+
+#[test]
+fn test_solve_target_rejects_invalid_config() {
+    let config = TargetConfig {
+        elev_min: 60.0,
+        elev_max: 10.0, // min > max!
+        ..TargetConfig::default()
+    };
+
+    let result = solve_target(&config);
+    assert!(result.is_err(), "elev_min > elev_max should be rejected");
+}

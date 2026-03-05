@@ -19,7 +19,9 @@ pub(crate) fn hamltn(
     let kph = y[5];
 
     let sth = theta.sin();
-    let rsth = r * sth;
+    // Guard against near-zero sin(theta) at geographic poles to prevent
+    // enormous derivatives that destabilize the integrator.
+    let rsth = (r * sth).max(1.0e-12);
 
     let ri = compute_rindex(r, theta, phi, kr, kth, kph, freq_mhz, ray_mode, p, rstart);
 

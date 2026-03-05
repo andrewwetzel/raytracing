@@ -88,6 +88,20 @@ pub struct FanTraceResult {
 /// Trace a fan of rays through the ionosphere.
 #[tracing::instrument(skip(config), level = "info")]
 pub fn fan_trace(config: &FanTraceConfig) -> Result<FanTraceResult, TraceError> {
+    // Input validation
+    if config.freq_mhz <= 0.0 {
+        return Err(TraceError::InvalidFrequency(config.freq_mhz));
+    }
+    if config.elev_step <= 0.0 {
+        return Err(TraceError::InvalidStepSize(config.elev_step));
+    }
+    if config.max_steps == 0 {
+        return Err(TraceError::InvalidMaxSteps(config.max_steps));
+    }
+    if config.elev_min > config.elev_max {
+        return Err(TraceError::InvalidElevation(config.elev_min));
+    }
+
     tracing::info!(
         freq_mhz = config.freq_mhz,
         elev_min = config.elev_min,

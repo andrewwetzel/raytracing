@@ -45,6 +45,9 @@ pub fn compute_ed(
 
 /// Chapman layer (CHAPX) — default
 fn chapx(r: f64, theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> ElectronDensityResult {
+    if p.sh <= 0.0 {
+        return ElectronDensityResult { x: 0.0, dxdr: 0.0, dxdth: 0.0, dxdph: 0.0, dxdt: 0.0 };
+    }
     let theta2 = theta - PID2;
     let hmax = p.hm + p.earth_r * p.ed_e * theta2;
     let h = r - p.earth_r;
@@ -59,8 +62,13 @@ fn chapx(r: f64, theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> Elect
     let x = fc_f * fc_f * temp * (p.alpha * (exz - z)).exp();
     let dxdr = -p.alpha * x * exz / p.sh;
 
-    let mut dxdth = x * (d * p.ed_a * (PID2 - d * theta2).sin() + p.ed_c) / temp;
-    dxdth -= dxdr * p.earth_r * p.ed_e;
+    let dxdth = if temp.abs() > 1.0e-30 {
+        let mut v = x * (d * p.ed_a * (PID2 - d * theta2).sin() + p.ed_c) / temp;
+        v -= dxdr * p.earth_r * p.ed_e;
+        v
+    } else {
+        -dxdr * p.earth_r * p.ed_e
+    };
 
     ElectronDensityResult {
         x,
@@ -79,6 +87,9 @@ fn elect1_ed(
     freq_mhz: f64,
     p: &ModelParams,
 ) -> ElectronDensityResult {
+    if p.sh <= 0.0 {
+        return ElectronDensityResult { x: 0.0, dxdr: 0.0, dxdth: 0.0, dxdph: 0.0, dxdt: 0.0 };
+    }
     let h = r - p.earth_r;
     let z = (h - p.hm) / p.sh;
     let fc_f = p.fc / freq_mhz;
@@ -100,10 +111,12 @@ fn linear(r: f64, _theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> Ele
     let fc_f = p.fc / freq_mhz;
     let fc2 = fc_f * fc_f;
 
-    let (x, dxdr) = if h <= p.hm {
+    let (x, dxdr) = if p.hm <= 0.0 {
+        (0.0, 0.0)
+    } else if h <= p.hm {
         (fc2 * h / p.hm, fc2 / p.hm)
     } else {
-        let semi = p.ym / 2.0;
+        let semi = if p.ym > 0.0 { p.ym / 2.0 } else { 1.0 };
         let z = (h - p.hm) / semi;
         if z < 1.0 {
             (fc2 * (1.0 - z * z), fc2 * (-2.0 * z / semi))
@@ -128,7 +141,7 @@ fn qparab(r: f64, _theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> Ele
     let fc_f = p.fc / freq_mhz;
     let fc2 = fc_f * fc_f;
 
-    if r <= rb || r <= 0.0 {
+    if r <= rb || r <= 0.0 || p.ym <= 0.0 {
         return ElectronDensityResult {
             x: 0.0,
             dxdr: 0.0,
@@ -192,7 +205,7 @@ fn vchapx(r: f64, _theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> Ele
 /// Dual-layer Chapman (DCHAPT) — two layers with latitude variation
 fn dchapt(r: f64, theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> ElectronDensityResult {
     let h = r - p.earth_r;
-    if h <= 0.0 {
+    if h <= 0.0 || p.sh <= 0.0 {
         return ElectronDensityResult {
             x: 0.0,
             dxdr: 0.0,
@@ -210,9 +223,13 @@ fn dchapt(r: f64, theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> Elec
     let fc_f = p.fc / freq_mhz;
     let x1 = fc_f * fc_f * temp * (0.5 * (expz1 - z1)).exp();
     let dxdr1 = -0.5 * x1 * expz1 / p.sh;
-    let dxdth1 = x1 * p.ed_c / temp - dxdr1 * earthe;
+    let dxdth1 = if temp.abs() > 1.0e-30 {
+        x1 * p.ed_c / temp - dxdr1 * earthe
+    } else {
+        -dxdr1 * earthe
+    };
     let (mut x, mut dxdr, mut dxdth) = (x1, dxdr1, dxdth1);
-    if p.fc2 != 0.0 {
+    if p.fc2 != 0.0 && p.sh2 > 0.0 {
         let fc2_f = p.fc2 / freq_mhz;
         let z2 = (h - p.hm2 - earthe * theta2) / p.sh2;
         let expz2 = 1.0 - (-z2).exp();
@@ -220,7 +237,11 @@ fn dchapt(r: f64, theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> Elec
         let dxdr2 = -0.5 * x2 * expz2 / p.sh2;
         x += x2;
         dxdr += dxdr2;
-        dxdth += x2 * p.ed_c / temp - dxdr2 * earthe;
+        dxdth += if temp.abs() > 1.0e-30 {
+            x2 * p.ed_c / temp - dxdr2 * earthe
+        } else {
+            -dxdr2 * earthe
+        };
     }
     ElectronDensityResult {
         x,
@@ -323,7 +344,8 @@ fn apply_bulge(
     }
     let hmax = p.p1 + 5.0 * p.p2;
     let h = r - (p.earth_r + hmax);
-    let e = (h / p.p2).exp();
+    let exp_arg = (h / p.p2).clamp(-20.0, 20.0);
+    let e = exp_arg.exp();
     let hsc2 = if p.p7 != 0.0 { p.p7 } else { 1.0 };
     let hsc3 = if p.p8 != 0.0 { p.p8 } else { 1.0 };
     let frac_term = p.p4 * (-((theta - p.p5) / hsc2).powi(2) - ((phi - p.p6) / hsc3).powi(2)).exp();
@@ -340,7 +362,8 @@ fn apply_expx_pert(ed: &mut ElectronDensityResult, r: f64, p: &ModelParams) {
     }
     let hmax = p.p1 + 5.0 * p.p2;
     let h = r - (p.earth_r + hmax);
-    let x_add = p.p3 * (h / p.p2).exp();
+    let exp_arg = (h / p.p2).clamp(-20.0, 20.0);
+    let x_add = p.p3 * exp_arg.exp();
     ed.x += x_add;
     ed.dxdr += x_add / p.p2;
 }
@@ -589,5 +612,124 @@ mod tests {
                 model
             );
         }
+    }
+
+    // ---- Perturbation finiteness tests (H) ----
+
+    #[test]
+    fn test_all_perturbation_models_finite() {
+        let r = EARTH_RADIUS + 250.0;
+
+        // Torus
+        let mut p = default_params();
+        p.pert_model = crate::params::PerturbationModel::Torus;
+        p.p1 = 0.5; p.p2 = 200.0; p.p3 = 200.0; p.p4 = 0.3; p.p5 = 250.0;
+        let ed = compute_ed(r, PID2, 0.0, p.fc, &p);
+        assert!(ed.x.is_finite(), "Torus x not finite");
+        assert!(ed.dxdr.is_finite(), "Torus dxdr not finite");
+
+        // Trough
+        let mut p = default_params();
+        p.pert_model = crate::params::PerturbationModel::Trough;
+        p.p1 = -0.3; p.p2 = 0.1; p.p3 = 0.0; p.p4 = 1.0;
+        let ed = compute_ed(r, PID2, 0.0, p.fc, &p);
+        assert!(ed.x.is_finite(), "Trough x not finite");
+        assert!(ed.dxdr.is_finite(), "Trough dxdr not finite");
+
+        // Shock
+        let mut p = default_params();
+        p.pert_model = crate::params::PerturbationModel::Shock;
+        p.p1 = 0.2; p.p2 = 100.0; p.p3 = 0.0; p.p4 = 0.0;
+        p.p5 = 1.0; p.p6 = 200.0;
+        let ed = compute_ed(r, PID2, 0.5, p.fc, &p);
+        assert!(ed.x.is_finite(), "Shock x not finite");
+        assert!(ed.dxdr.is_finite(), "Shock dxdr not finite");
+
+        // Bulge
+        let mut p = default_params();
+        p.pert_model = crate::params::PerturbationModel::Bulge;
+        p.p1 = 200.0; p.p2 = 50.0; p.p3 = 0.1; p.p4 = 0.5;
+        p.p5 = PID2; p.p6 = 0.0; p.p7 = 0.3; p.p8 = 0.5;
+        let ed = compute_ed(r, PID2, 0.0, p.fc, &p);
+        assert!(ed.x.is_finite(), "Bulge x not finite");
+        assert!(ed.dxdr.is_finite(), "Bulge dxdr not finite");
+
+        // Exponential
+        let mut p = default_params();
+        p.pert_model = crate::params::PerturbationModel::Exponential;
+        p.p1 = 200.0; p.p2 = 50.0; p.p3 = 0.1;
+        let ed = compute_ed(r, PID2, 0.0, p.fc, &p);
+        assert!(ed.x.is_finite(), "Exponential x not finite");
+        assert!(ed.dxdr.is_finite(), "Exponential dxdr not finite");
+    }
+
+    // ---- Degenerate parameter tests (I) ----
+
+    #[test]
+    fn test_chapx_sh_zero_returns_zero() {
+        let mut p = default_params();
+        p.sh = 0.0;
+        let r = EARTH_RADIUS + 200.0;
+        let ed = compute_ed(r, PID2, 0.0, p.fc, &p);
+        assert!(ed.x.is_finite(), "chapx with sh=0: x should be finite");
+        assert_eq!(ed.x, 0.0, "chapx with sh=0: x should be 0");
+    }
+
+    #[test]
+    fn test_linear_hm_zero_returns_zero() {
+        let mut p = default_params();
+        p.ed_model = crate::params::ElectronDensityModel::Linear;
+        p.hm = 0.0;
+        let r = EARTH_RADIUS + 200.0;
+        let ed = compute_ed(r, PID2, 0.0, p.fc, &p);
+        assert!(ed.x.is_finite(), "linear with hm=0: x should be finite");
+        assert_eq!(ed.x, 0.0, "linear with hm=0: x should be 0");
+    }
+
+    #[test]
+    fn test_qparab_ym_zero_returns_zero() {
+        let mut p = default_params();
+        p.ed_model = crate::params::ElectronDensityModel::QuasiParabolic;
+        p.ym = 0.0;
+        let r = EARTH_RADIUS + 200.0;
+        let ed = compute_ed(r, PID2, 0.0, p.fc, &p);
+        assert!(ed.x.is_finite(), "qparab with ym=0: x should be finite");
+        assert_eq!(ed.x, 0.0, "qparab with ym=0: x should be 0");
+    }
+
+    #[test]
+    fn test_dchapt_sh_zero_returns_zero() {
+        let mut p = default_params();
+        p.ed_model = crate::params::ElectronDensityModel::DualChapman;
+        p.sh = 0.0;
+        let r = EARTH_RADIUS + 200.0;
+        let ed = compute_ed(r, PID2, 0.0, p.fc, &p);
+        assert!(ed.x.is_finite(), "dchapt with sh=0: x should be finite");
+        assert_eq!(ed.x, 0.0, "dchapt with sh=0: x should be 0");
+    }
+
+    #[test]
+    fn test_elect1_sh_zero_returns_zero() {
+        let mut p = default_params();
+        p.ed_model = crate::params::ElectronDensityModel::Elect1;
+        p.sh = 0.0;
+        let r = EARTH_RADIUS + 200.0;
+        let ed = compute_ed(r, PID2, 0.0, p.fc, &p);
+        assert!(ed.x.is_finite(), "elect1 with sh=0: x should be finite");
+        assert_eq!(ed.x, 0.0, "elect1 with sh=0: x should be 0");
+    }
+
+    #[test]
+    fn test_bulge_finite_at_extreme_distance() {
+        // Bulge perturbation at a point far from center should still be finite
+        let mut p = default_params();
+        p.pert_model = crate::params::PerturbationModel::Bulge;
+        p.p1 = 200.0; p.p2 = 50.0; p.p3 = 0.1; p.p4 = 0.5;
+        p.p5 = 0.0; p.p6 = 0.0; p.p7 = 0.3; p.p8 = 0.5;
+        // r very far from perturbation center
+        let r = EARTH_RADIUS + 5000.0;
+        let ed = compute_ed(r, PID2, 0.0, p.fc, &p);
+        assert!(ed.x.is_finite(), "Bulge at extreme distance: x should be finite");
+        assert!(ed.dxdr.is_finite(), "Bulge at extreme distance: dxdr should be finite");
     }
 }

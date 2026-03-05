@@ -122,6 +122,26 @@ impl TraceConfig {
         }
     }
 
+    /// Validate this configuration without running a trace.
+    ///
+    /// Returns `Ok(())` if the configuration is valid, or a [`TraceError`]
+    /// describing the first problem found. Useful for pre-flight checks.
+    pub fn validate(&self) -> Result<(), TraceError> {
+        if self.freq_mhz <= 0.0 {
+            return Err(TraceError::InvalidFrequency(self.freq_mhz));
+        }
+        if !(-90.0..=90.0).contains(&self.elevation_deg) {
+            return Err(TraceError::InvalidElevation(self.elevation_deg));
+        }
+        if self.step_size <= 0.0 {
+            return Err(TraceError::InvalidStepSize(self.step_size));
+        }
+        if self.max_steps == 0 {
+            return Err(TraceError::InvalidMaxSteps(self.max_steps));
+        }
+        Ok(())
+    }
+
     /// Trace a ray through the ionosphere using this configuration.
     ///
     /// Returns a [`TraceResult`] containing the ray path and summary statistics,
@@ -238,11 +258,20 @@ pub fn trace_ray(
     let mut went_up = false;
 
     for step_num in 1..=max_steps {
-        // One integrator step
+        // One integrator step (may need multiple calls during warmup when mm < 4)
         if state.mm < 4 || state.mode == 1 {
             rk4_step(&mut state, freq_mhz, ray_mode, p);
+            // Warmup: rk4_step no longer recurses, keep stepping until mm >= 4
+            while state.mm < 4 && state.mode != 1 && !state.diverged {
+                rk4_step(&mut state, freq_mhz, ray_mode, p);
+            }
         } else {
             am_step(&mut state, freq_mhz, ray_mode, p);
+        }
+
+        // Bail if integrator diverged (NaN/Inf detected)
+        if state.diverged {
+            break;
         }
 
         let h = state.y[0] - p.earth_r;

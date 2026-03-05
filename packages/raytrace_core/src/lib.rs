@@ -274,7 +274,7 @@ pub fn solve_target_wasm(request_json: &str) -> String {
 
     let result = match solve_target(&config) {
         Ok(mut r) => {
-            r.elapsed_ms = (js_sys::Date::now() - start * 100.0).round() / 100.0;
+            r.elapsed_ms = ((js_sys::Date::now() - start) * 100.0).round() / 100.0;
             r
         }
         Err(e) => {

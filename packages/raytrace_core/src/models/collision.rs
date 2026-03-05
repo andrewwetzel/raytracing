@@ -30,11 +30,16 @@ pub fn compute_col(
 
 /// Two-term exponential collision (EXPZ2) — default
 fn expz2(r: f64, _theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> CollisionResult {
-    let h = r - p.earth_r;
+    let h = (r - p.earth_r).max(0.0);
     let omega = PIT2 * freq_mhz * 1.0e6;
+    if omega == 0.0 {
+        return CollisionResult { z: 0.0, dzdr: 0.0, dzdth: 0.0, dzdph: 0.0 };
+    }
 
-    let exp1 = p.nu1 * (-p.a1 * (h - p.h1)).exp();
-    let exp2 = p.nu2 * (-p.a2 * (h - p.h2)).exp();
+    let arg1 = (-p.a1 * (h - p.h1)).clamp(-20.0, 20.0);
+    let arg2 = (-p.a2 * (h - p.h2)).clamp(-20.0, 20.0);
+    let exp1 = p.nu1 * arg1.exp();
+    let exp2 = p.nu2 * arg2.exp();
 
     let z = (exp1 + exp2) / omega;
     let dzdr = (-p.a1 * exp1 - p.a2 * exp2) / omega;
@@ -61,10 +66,14 @@ fn constz(_r: f64, _theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> Co
 
 /// Single exponential collision (EXPZ)
 fn expz(r: f64, _theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> CollisionResult {
-    let h = r - p.earth_r;
+    let h = (r - p.earth_r).max(0.0);
     let omega = PIT2 * freq_mhz * 1.0e6;
+    if omega == 0.0 {
+        return CollisionResult { z: 0.0, dzdr: 0.0, dzdth: 0.0, dzdph: 0.0 };
+    }
 
-    let exp1 = p.nu1 * (-p.a1 * (h - p.h1)).exp();
+    let arg1 = (-p.a1 * (h - p.h1)).clamp(-20.0, 20.0);
+    let exp1 = p.nu1 * arg1.exp();
 
     let z = exp1 / omega;
     let dzdr = -p.a1 * exp1 / omega;

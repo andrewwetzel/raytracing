@@ -85,7 +85,7 @@ fn ahnfnc(
     let space = n2_re == 1.0;
     let kay2_re = om2 / c2 * n2_re;
     let (new_kr, new_kth, new_kph) = if rstart && k2 > 0.0 {
-        let scale = (kay2_re / k2).sqrt();
+        let scale = (kay2_re.max(0.0) / k2).sqrt();
         (scale * kr, scale * kth, scale * kph)
     } else {
         (kr, kth, kph)
@@ -154,7 +154,7 @@ fn ahnfwc(
     let space = n2.re == 1.0 && n2.im.abs() < 1.0e-5;
     let kay2_re = om2 / c2 * n2.re;
     let (new_kr, new_kth, new_kph) = if rstart && k2 > 0.0 {
-        let scale = (kay2_re / k2).sqrt();
+        let scale = (kay2_re.max(0.0) / k2).sqrt();
         (scale * kr, scale * kth, scale * kph)
     } else {
         (kr, kth, kph)
@@ -280,7 +280,7 @@ fn ahwfnc(
     let space = n2_re == 1.0;
     let kay2_re = om2 / c2 * n2_re;
     let (new_kr, new_kth, new_kph) = if rstart && k2 > 0.0 {
-        let scale = (kay2_re / k2).sqrt();
+        let scale = (kay2_re.max(0.0) / k2).sqrt();
         (scale * kr, scale * kth, scale * kph)
     } else {
         (kr, kth, kph)
@@ -444,7 +444,7 @@ fn ahwfwc(
     // Rescale k-vector on first call
     let kay2_re = om2 / c2 * n2.re;
     let (new_kr, new_kth, new_kph) = if rstart && k2 > 0.0 {
-        let scale = (kay2_re / k2).sqrt();
+        let scale = (kay2_re.max(0.0) / k2).sqrt();
         (scale * kr, scale * kth, scale * kph)
     } else {
         (kr, kth, kph)
