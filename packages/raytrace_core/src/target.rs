@@ -380,29 +380,40 @@ fn coarse_sweep(
     // Find brackets: adjacent rays where signed error changes sign
     let mut brackets = Vec::new();
     for i in 0..outcomes.len().saturating_sub(1) {
-        if let (Some(err_lo), Some(err_hi)) = (outcomes[i].1, outcomes[i + 1].1) {
-            // Sign change means the target range is bracketed
-            if err_lo * err_hi < 0.0 {
+        let (elev_lo, ref err_a) = outcomes[i];
+        let (elev_hi, ref err_b) = outcomes[i + 1];
+
+        match (err_a, err_b) {
+            // Classic sign-change bracket: both returned, opposite sign errors
+            (Some(ea), Some(eb)) if ea * eb < 0.0 => {
                 brackets.push(Bracket {
-                    elev_lo: outcomes[i].0,
-                    elev_hi: outcomes[i + 1].0,
-                    err_lo,
-                    err_hi,
+                    elev_lo,
+                    elev_hi,
+                    err_lo: *ea,
+                    err_hi: *eb,
                 });
             }
-            // Also check if either endpoint is already within tolerance
-            let abs_err_lo = haversine_km(
-                fire_ray(freq, config.ray_mode, outcomes[i].0, az, config.tx_lat_deg, config, false)
-                    .map(|o| o.landing_lat)
-                    .unwrap_or(0.0),
-                fire_ray(freq, config.ray_mode, outcomes[i].0, az, config.tx_lat_deg, config, false)
-                    .map(|o| o.landing_lon)
-                    .unwrap_or(0.0),
-                config.target_lat_deg,
-                config.target_lon_deg,
-            );
-            // We handle the "already close" case in the bisect phase
-            let _ = abs_err_lo;
+            // Escape-boundary bracket: ray undershot then next escaped.
+            // The target might be reachable just below the escape angle.
+            (Some(ea), None) if *ea < 0.0 => {
+                brackets.push(Bracket {
+                    elev_lo,
+                    elev_hi,
+                    err_lo: *ea,
+                    err_hi: 1e6, // synthetic overshoot for escaped ray
+                });
+            }
+            // Escape-boundary bracket: ray escaped then next returned with undershoot.
+            // (less common but possible with multi-hop or irregular profiles)
+            (None, Some(eb)) if *eb < 0.0 => {
+                brackets.push(Bracket {
+                    elev_lo,
+                    elev_hi,
+                    err_lo: 1e6, // synthetic overshoot for escaped ray
+                    err_hi: *eb,
+                });
+            }
+            _ => {}
         }
     }
 

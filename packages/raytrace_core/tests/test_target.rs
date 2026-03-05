@@ -206,3 +206,44 @@ fn test_target_different_ed_models() {
         );
     }
 }
+
+#[test]
+fn test_target_escape_boundary_long_range() {
+    // Long-range target that requires near-escape-boundary elevation angles.
+    // Previously the solver would find zero brackets because rays transition
+    // from "returned but too short" directly to "escaped" without a sign change.
+    let config = TargetConfig {
+        target_lat_deg: 40.0,   // roughly Spain latitude
+        target_lon_deg: 50.0,   // ~50° east of TX → very long range
+        tx_lat_deg: 34.0,       // SC latitude
+        freq_mhz: SearchSpec::Fixed(10.0),
+        azimuth_deg: SearchSpec::Fixed(0.0),
+        error_limit_km: 100.0,  // generous tolerance for this geometry
+        coarse_step: 2.0,
+        elev_min: 1.0,
+        elev_max: 60.0,
+        max_bisect_iters: 30,
+        max_hops: 1,
+        step_size: 5.0,
+        max_steps: 1000,
+        ..TargetConfig::default()
+    };
+
+    let result = solve_target(&config).unwrap();
+    // The key assertion: the solver should explore escape-boundary brackets
+    // even if no classic sign-change brackets exist.
+    println!(
+        "Escape-boundary test: {} solutions, {} rays traced, best_err={:.1} km",
+        result.solutions.len(),
+        result.rays_traced,
+        result.best.as_ref().map(|s| s.error_km).unwrap_or(f64::INFINITY),
+    );
+    // We mainly verify this doesn't panic and does trace rays through escape brackets.
+    // Whether a solution is found depends on ionospheric physics — the important thing
+    // is that the solver TRIES the escape boundary rather than giving up with 0 brackets.
+    assert!(
+        result.rays_traced > 40,
+        "Solver should trace extra rays for escape-boundary brackets, got only {}",
+        result.rays_traced
+    );
+}

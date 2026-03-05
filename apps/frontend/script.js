@@ -1603,8 +1603,17 @@ async function targetBisection() {
   const brackets = [];
   for (let i = 0; i < sweepResults.length - 1; i++) {
     const a = sweepResults[i], b = sweepResults[i + 1];
+    // Classic sign-change bracket: both returned, opposite sign errors
     if (a.signedErr != null && b.signedErr != null && a.signedErr * b.signedErr < 0) {
       brackets.push({ lo: a.elev, hi: b.elev, errLo: a.signedErr, errHi: b.signedErr });
+    }
+    // Escape-boundary bracket: returned ray undershot, adjacent ray escaped
+    // The target might be reachable just below the escape angle
+    else if (a.signedErr != null && a.signedErr < 0 && b.signedErr == null) {
+      brackets.push({ lo: a.elev, hi: b.elev, errLo: a.signedErr, errHi: 1e6 });
+    }
+    else if (a.signedErr == null && b.signedErr != null && b.signedErr < 0) {
+      brackets.push({ lo: a.elev, hi: b.elev, errLo: 1e6, errHi: b.signedErr });
     }
   }
 
@@ -1644,6 +1653,9 @@ async function targetBisection() {
       if (err <= tolerance) break;
 
       if (sErr != null && sErr * errLo < 0) {
+        hi = mid;
+      } else if (sErr == null) {
+        // Ray escaped — shrink from the escape side
         hi = mid;
       } else {
         lo = mid;
