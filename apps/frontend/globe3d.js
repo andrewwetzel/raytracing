@@ -440,49 +440,32 @@ function createTxMarker(latDeg, lonDeg) {
     txMarker = new THREE.Group();
 
     const pos = latLonAltToVec3(latDeg, lonDeg, 0);
-    const towerTop = latLonAltToVec3(latDeg, lonDeg, 50); // 50km tall tower (exaggerated for visibility)
+    const towerTop = latLonAltToVec3(latDeg, lonDeg, 15);
 
     // Tower mast
     const mastGeom = new THREE.BufferGeometry().setFromPoints([pos, towerTop]);
-    const mastMat = new THREE.LineBasicMaterial({ color: 0x10b981, linewidth: 2 });
+    const mastMat = new THREE.LineBasicMaterial({ color: 0x10b981, linewidth: 1 });
     txMarker.add(new THREE.Line(mastGeom, mastMat));
 
-    // Wave rings at top
-    for (let i = 1; i <= 3; i++) {
-        const ringR = 0.008 * i;
-        const ringGeom = new THREE.RingGeometry(ringR - 0.001, ringR, 16);
+    // Small wave arcs at top
+    for (let i = 1; i <= 2; i++) {
+        const ringR = 0.003 * i;
+        const ringGeom = new THREE.RingGeometry(ringR - 0.0005, ringR, 12);
         const ringMat = new THREE.MeshBasicMaterial({
-            color: 0x10b981,
-            transparent: true,
-            opacity: 0.4 - i * 0.1,
-            side: THREE.DoubleSide,
+            color: 0x10b981, transparent: true, opacity: 0.3 - i * 0.1, side: THREE.DoubleSide,
         });
         const ring = new THREE.Mesh(ringGeom, ringMat);
         ring.position.copy(towerTop);
-        ring.lookAt(pos.clone().multiplyScalar(2)); // face outward
+        ring.lookAt(pos.clone().multiplyScalar(2));
         txMarker.add(ring);
     }
 
-    // Glowing dot at base
-    const dotGeom = new THREE.SphereGeometry(0.004, 8, 8);
+    // Tiny dot at base
+    const dotGeom = new THREE.SphereGeometry(0.002, 6, 6);
     const dotMat = new THREE.MeshBasicMaterial({ color: 0x10b981 });
     const dot = new THREE.Mesh(dotGeom, dotMat);
     dot.position.copy(pos);
     txMarker.add(dot);
-
-    // Pulsing ring at base
-    const pulseGeom = new THREE.RingGeometry(0.005, 0.007, 32);
-    const pulseMat = new THREE.MeshBasicMaterial({
-        color: 0x10b981,
-        transparent: true,
-        opacity: 0.3,
-        side: THREE.DoubleSide,
-    });
-    const pulseRing = new THREE.Mesh(pulseGeom, pulseMat);
-    pulseRing.position.copy(pos);
-    pulseRing.lookAt(pos.clone().multiplyScalar(2));
-    pulseRing.userData.pulse = true;
-    txMarker.add(pulseRing);
 
     scene.add(txMarker);
 }
@@ -491,40 +474,26 @@ function createRxMarker(latDeg, lonDeg) {
     rxMarker = new THREE.Group();
 
     const pos = latLonAltToVec3(latDeg, lonDeg, 0);
-    const towerTop = latLonAltToVec3(latDeg, lonDeg, 40); // 40km tall (exaggerated)
+    const towerTop = latLonAltToVec3(latDeg, lonDeg, 12);
 
     // Tower mast
     const mastGeom = new THREE.BufferGeometry().setFromPoints([pos, towerTop]);
-    const mastMat = new THREE.LineBasicMaterial({ color: 0xef4444, linewidth: 2 });
+    const mastMat = new THREE.LineBasicMaterial({ color: 0xef4444, linewidth: 1 });
     rxMarker.add(new THREE.Line(mastGeom, mastMat));
 
-    // Dish at top (V shape using two lines)
-    const dishLeft = latLonAltToVec3(latDeg - 0.3, lonDeg - 0.3, 50);
-    const dishRight = latLonAltToVec3(latDeg + 0.3, lonDeg + 0.3, 50);
+    // Small dish at top
+    const dishLeft = latLonAltToVec3(latDeg - 0.15, lonDeg - 0.15, 16);
+    const dishRight = latLonAltToVec3(latDeg + 0.15, lonDeg + 0.15, 16);
     const dishGeom = new THREE.BufferGeometry().setFromPoints([dishLeft, towerTop, dishRight]);
-    const dishMat = new THREE.LineBasicMaterial({ color: 0xef4444, linewidth: 2 });
+    const dishMat = new THREE.LineBasicMaterial({ color: 0xef4444, linewidth: 1 });
     rxMarker.add(new THREE.Line(dishGeom, dishMat));
 
-    // Glowing dot at base
-    const dotGeom = new THREE.SphereGeometry(0.004, 8, 8);
+    // Tiny dot at base
+    const dotGeom = new THREE.SphereGeometry(0.002, 6, 6);
     const dotMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
     const dot = new THREE.Mesh(dotGeom, dotMat);
     dot.position.copy(pos);
     rxMarker.add(dot);
-
-    // Pulsing ring at base
-    const pulseGeom = new THREE.RingGeometry(0.005, 0.007, 32);
-    const pulseMat = new THREE.MeshBasicMaterial({
-        color: 0xef4444,
-        transparent: true,
-        opacity: 0.3,
-        side: THREE.DoubleSide,
-    });
-    const pulseRing = new THREE.Mesh(pulseGeom, pulseMat);
-    pulseRing.position.copy(pos);
-    pulseRing.lookAt(pos.clone().multiplyScalar(2));
-    pulseRing.userData.pulse = true;
-    rxMarker.add(pulseRing);
 
     scene.add(rxMarker);
 }
@@ -534,31 +503,15 @@ function createLandingMarker(latDeg, lonDeg) {
 
     const pos = latLonAltToVec3(latDeg, lonDeg, 0);
 
-    // Diamond shape using an octahedron
-    const diamondGeom = new THREE.OctahedronGeometry(0.005, 0);
+    // Small diamond
+    const diamondGeom = new THREE.OctahedronGeometry(0.003, 0);
     const diamondMat = new THREE.MeshBasicMaterial({
-        color: 0xf59e0b,  // amber/yellow
-        transparent: true,
-        opacity: 0.9,
+        color: 0xf59e0b, transparent: true, opacity: 0.9,
     });
     const diamond = new THREE.Mesh(diamondGeom, diamondMat);
     diamond.position.copy(pos);
     diamond.lookAt(pos.clone().multiplyScalar(2));
     landingMarker.add(diamond);
-
-    // Pulsing ring
-    const ringGeom = new THREE.RingGeometry(0.006, 0.008, 32);
-    const ringMat = new THREE.MeshBasicMaterial({
-        color: 0xf59e0b,
-        transparent: true,
-        opacity: 0.3,
-        side: THREE.DoubleSide,
-    });
-    const ring = new THREE.Mesh(ringGeom, ringMat);
-    ring.position.copy(pos);
-    ring.lookAt(pos.clone().multiplyScalar(2));
-    ring.userData.pulse = true;
-    landingMarker.add(ring);
 
     scene.add(landingMarker);
 }
