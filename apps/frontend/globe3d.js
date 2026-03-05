@@ -6,6 +6,9 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 const EARTH_R = 6371; // km
 const SCALE = 1 / EARTH_R; // normalize so Earth radius = 1
+// Altitude exaggeration: at true scale, 300 km altitude is only 4.7% of Earth radius,
+// making ray arcs nearly invisible. Exaggerate to make them clearly visible.
+const ALT_EXAGGERATION = 20;
 
 let scene, camera, renderer, controls;
 let container;
@@ -117,7 +120,8 @@ export function initGlobe(containerEl) {
 export function lookAtLocation(lat, lon) {
     if (!camera || !controls) return;
     const latR = THREE.MathUtils.degToRad(lat);
-    const lonR = THREE.MathUtils.degToRad(lon);
+    // Must match the +PI/2 offset used in latLonAltToVec3 for texture alignment
+    const lonR = THREE.MathUtils.degToRad(lon) + Math.PI / 2;
     const dist = camera.position.length() || 3.2;
     camera.position.set(
         dist * Math.cos(latR) * Math.sin(lonR),
@@ -151,7 +155,8 @@ export function zoomToFit(lat1, lon1, lat2, lon2) {
     const dist = Math.max(1.3, (1.2 * span) / halfFov + 1.0);
 
     const latR = THREE.MathUtils.degToRad(midLat);
-    const lonR = THREE.MathUtils.degToRad(midLon);
+    // Must match the +PI/2 offset used in latLonAltToVec3 for texture alignment
+    const lonR = THREE.MathUtils.degToRad(midLon) + Math.PI / 2;
     camera.position.set(
         dist * Math.cos(latR) * Math.sin(lonR),
         dist * Math.sin(latR),
@@ -228,7 +233,7 @@ export function updateGlobeRays(traceGroups, txLatDeg, txLonDeg, rxLatDeg, rxLon
             }
             const positions = [];
             for (const pt of ray.pts) {
-                const pos = latLonAltToVec3(pt.lat, pt.lon + txLon, pt.h);
+                const pos = latLonAltToVec3(pt.lat, pt.lon + txLon, pt.h, ALT_EXAGGERATION);
                 positions.push(pos.x, pos.y, pos.z);
             }
             const geometry = new THREE.BufferGeometry();
@@ -284,8 +289,8 @@ export function onGlobeClick(callback) {
 
 // ---- Internal ----
 
-function latLonAltToVec3(latDeg, lonDeg, altKm) {
-    const r = 1 + altKm * SCALE;
+function latLonAltToVec3(latDeg, lonDeg, altKm, altExaggeration = 1.0) {
+    const r = 1 + altKm * altExaggeration * SCALE;
     const lat = THREE.MathUtils.degToRad(latDeg);
     // Offset by +PI/2 to match the texture seam mapping
     const lon = THREE.MathUtils.degToRad(lonDeg) + Math.PI / 2;

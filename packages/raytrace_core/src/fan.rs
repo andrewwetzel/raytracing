@@ -117,6 +117,9 @@ pub fn fan_trace(config: &FanTraceConfig) -> Result<FanTraceResult, TraceError> 
             let mut hop_summaries = Vec::new();
 
             let mut cur_lat = config.tx_lat_deg;
+            // Accumulated longitude offset: each hop starts at phi=0,
+            // so we must add the ending lon of the previous hop.
+            let mut lon_offset = 0.0f64;
 
             for _hop in 0..config.max_hops {
                 let result = match trace_ray(
@@ -147,7 +150,7 @@ pub fn fan_trace(config: &FanTraceConfig) -> Result<FanTraceResult, TraceError> 
                         h: (pt.height_km * 100.0).round() / 100.0,
                         t: (pt.t * 100.0).round() / 100.0,
                         lat: (pt.lat_deg * 10000.0).round() / 10000.0,
-                        lon: (pt.lon_deg * 10000.0).round() / 10000.0,
+                        lon: ((pt.lon_deg + lon_offset) * 10000.0).round() / 10000.0,
                         range: ((total_range + pt.ground_range_km) * 10.0).round() / 10.0,
                     });
                 }
@@ -162,7 +165,7 @@ pub fn fan_trace(config: &FanTraceConfig) -> Result<FanTraceResult, TraceError> 
                         hop_summaries.push(HopSummary {
                             range_km: (total_range * 10.0).round() / 10.0,
                             lat: (last_pt.lat_deg * 10000.0).round() / 10000.0,
-                            lon: (last_pt.lon_deg * 10000.0).round() / 10000.0,
+                            lon: ((last_pt.lon_deg + lon_offset) * 10000.0).round() / 10000.0,
                             absorption: (total_absorption * 10000.0).round() / 10000.0,
                         });
                     }
@@ -170,6 +173,7 @@ pub fn fan_trace(config: &FanTraceConfig) -> Result<FanTraceResult, TraceError> 
                     if _hop < config.max_hops - 1 {
                         if let Some(last_pt) = result.points.last() {
                             cur_lat = last_pt.lat_deg;
+                            lon_offset += last_pt.lon_deg;
                         }
                     } else {
                         break;
