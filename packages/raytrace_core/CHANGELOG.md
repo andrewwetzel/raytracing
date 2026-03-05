@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-03-05
+
+### Added
+- **Comprehensive Documentation**: Added field-level documentation to all public structs in `tracer`, `fan`, `target`, and `params` modules.
+- **Runnable Doc Examples**: Added 5 runnable examples to the crate root (`lib.rs`) covering Quick Start, Custom Physics, Fan Traces, Target Solver, and Exporting.
+- **New Example**: Added `examples/single_ray.rs` as a minimal hello-world entry point for new users.
+- **Physics Hierarchy Guide**: Added a guide in `models/mod.rs` explaining how the internal physics models interact.
+- **README Updates**: Added a Target Solver usage section and docs.rs badge.
+
 ## [0.3.0] - 2026-03-05
 
 ### Added
