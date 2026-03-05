@@ -1481,6 +1481,13 @@ async function targetBisection() {
   const baseFreq = parseFloat(document.getElementById('target-freq-min').value);
   const baseAz = getAzimuth();
 
+  // solve_target_wasm uses serde enum deserialization → needs string variant names
+  const ED_MODELS = ['Chapman', 'Elect1', 'Linear', 'QuasiParabolic', 'VarChapman', 'DualChapman'];
+  const MAG_MODELS = ['Dipole', 'Constant', 'Cubic', 'Igrf14'];
+  const COL_MODELS = ['DoubleExponential', 'Constant', 'SingleExponential'];
+  const RI_MODELS = ['Full', 'NoFieldNoCollisions', 'NoFieldWithCollisions', 'WithFieldNoCollisions'];
+  const PERT_MODELS = ['None', 'Torus', 'Trough', 'Shock', 'Bulge', 'Exponential'];
+
   const solverConfig = {
     target_lat_deg: targetLat,
     target_lon_deg: targetLon,
@@ -1500,11 +1507,11 @@ async function targetBisection() {
     include_ray_path: true,
     params: {
       earth_r: 6370.0,
-      ed_model: parseInt(getCheckedValues('ed-model-group')[0] || 0),
-      mag_model: parseInt(getCheckedValues('mag-model-group')[0] || 0),
-      col_model: 0,
-      rindex_model: parseInt(getCheckedValues('rindex-model-group')[0] || 0),
-      pert_model: parseInt(getCheckedValues('pert-model-group')[0] || 0),
+      ed_model: ED_MODELS[parseInt(getCheckedValues('ed-model-group')[0] || 0)],
+      mag_model: MAG_MODELS[parseInt(getCheckedValues('mag-model-group')[0] || 0)],
+      col_model: COL_MODELS[0],
+      rindex_model: RI_MODELS[parseInt(getCheckedValues('rindex-model-group')[0] || 0)],
+      pert_model: PERT_MODELS[parseInt(getCheckedValues('pert-model-group')[0] || 0)],
       fc: parseFloat(document.getElementById('target-fc-min').value),
       hm: parseFloat(document.getElementById('target-hm-min').value),
       sh: parseFloat(document.getElementById('target-sh-min').value),
