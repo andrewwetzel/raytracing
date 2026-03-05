@@ -1,6 +1,7 @@
 # ionotrace
 
 [![Crates.io](https://img.shields.io/crates/v/ionotrace.svg)](https://crates.io/crates/ionotrace)
+[![docs.rs](https://docs.rs/ionotrace/badge.svg)](https://docs.rs/ionotrace)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](../../LICENSE)
 
 High-performance ionospheric ray tracing engine in Rust. Implements the OT 75-76 algorithm for simulating HF radio wave propagation through the Earth's ionosphere.
@@ -80,6 +81,29 @@ const result = JSON.parse(trace_fan_wasm(JSON.stringify({
 console.log(`Traced ${result.n_rays} rays in ${result.elapsed_ms} ms`);
 ```
 
+## Target Solver
+
+Find the launch angles to hit a specific geographic location:
+
+```rust
+use ionotrace::{solve_target, TargetConfig, SearchSpec};
+
+let config = TargetConfig {
+    target_lat_deg: 50.0,
+    target_lon_deg: 5.0,
+    tx_lat_deg: 40.0,
+    freq_mhz: SearchSpec::Fixed(10.0),
+    error_limit_km: 20.0,
+    ..TargetConfig::default()
+};
+
+let result = solve_target(&config).unwrap();
+if let Some(best) = &result.best {
+    println!("Elevation: {:.1}°, Azimuth: {:.1}°, Error: {:.1} km",
+        best.elevation_deg, best.azimuth_deg, best.error_km);
+}
+```
+
 ## Building
 
 ```bash
@@ -104,6 +128,10 @@ H = ½(c²k²/ω² - n²)
 where n² is the complex refractive index from the Appleton-Hartree formula. The integrator uses 4th-order Runge-Kutta with Adams-Moulton predictor-corrector and adaptive step-size control.
 
 Based on: *A Versatile Three-Dimensional Ray Tracing Computer Program for Radio Waves in the Ionosphere*, R. M. Jones & J. J. Stephenson, OT Report 75-76 (1975). [PDF](https://www.ionolab.org/pubs/OT_Report_75_76.pdf)
+
+## API Documentation
+
+Full API reference on [docs.rs/ionotrace](https://docs.rs/ionotrace).
 
 ## License
 

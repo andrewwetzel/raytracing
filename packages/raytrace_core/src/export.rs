@@ -1,5 +1,20 @@
-//! Export utilities for formatting trace results into standard formats
-//! like CSV and JSON.
+//! Export utilities for trace results — CSV and JSON.
+//!
+//! # Example
+//!
+//! ```
+//! use ionotrace::{TraceConfig, export_trace_csv, export_json};
+//!
+//! let result = TraceConfig::new(10.0, 20.0).trace().unwrap();
+//!
+//! // CSV with one row per ray-path point
+//! let csv = export_trace_csv(&result).unwrap();
+//! assert!(csv.contains("height_km"));
+//!
+//! // Pretty-printed JSON
+//! let json = export_json(&result).unwrap();
+//! assert!(json.contains("max_height"));
+//! ```
 
 use crate::fan::FanTraceResult;
 use crate::tracer::TraceResult;

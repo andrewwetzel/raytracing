@@ -1,25 +1,27 @@
 //! ionotrace — High-performance ionospheric ray tracing engine
 //!
-//! Rust implementation of the OT 75-76 ray tracing algorithm with WASM bindings.
-//! Simulates HF radio wave propagation through a magnetized, collisional plasma
-//! using Hamilton's equations of motion.
+//! Simulates HF radio wave propagation through a magnetized, collisional ionosphere
+//! using Hamilton's equations of motion, based on the OT 75-76 algorithm.
+//!
+//! Compiles to native (with parallel ray tracing via Rayon) or WebAssembly.
 //!
 //! # Quick Start
 //!
+//! Trace a single 10 MHz ray at 20° elevation:
+//!
 //! ```
-//! use ionotrace::{TraceConfig, ModelParams};
+//! use ionotrace::TraceConfig;
 //!
-//! let config = TraceConfig::new(10.0, 20.0); // 10 MHz, 20° elevation
-//! let result = config.trace().unwrap();
+//! let result = TraceConfig::new(10.0, 20.0).trace().unwrap();
 //!
-//! println!("Max height: {:.2} km", result.max_height);
+//! println!("Max height: {:.1} km", result.max_height);
 //! println!("Ground range: {:.1} km", result.ground_range_km);
-//! println!("Returned to ground: {}", result.returned_to_ground);
+//! println!("Returned: {}", result.returned_to_ground);
 //! ```
 //!
-//! # Model Selection
+//! # Custom Physics
 //!
-//! Override physics models via [`ModelParams`]:
+//! Override ionospheric models via [`ModelParams`]:
 //!
 //! ```
 //! use ionotrace::{TraceConfig, ModelParams};
@@ -29,9 +31,85 @@
 //! config.params = ModelParams::builder()
 //!     .ed_model(ElectronDensityModel::DualChapman)
 //!     .mag_model(MagneticFieldModel::Igrf14)
+//!     .fc(8.0)    // critical frequency (MHz)
+//!     .hm(300.0)  // peak height (km)
 //!     .build()
 //!     .unwrap();
 //! ```
+//!
+//! # Fan Traces
+//!
+//! Sweep a range of elevation angles (parallelized on native via Rayon):
+//!
+//! ```
+//! use ionotrace::{fan_trace, FanTraceConfig};
+//!
+//! let config = FanTraceConfig {
+//!     freq_mhz: 10.0,
+//!     elev_min: 5.0,
+//!     elev_max: 80.0,
+//!     elev_step: 5.0,
+//!     ..FanTraceConfig::default()
+//! };
+//!
+//! let result = fan_trace(&config).unwrap();
+//! println!("Traced {} rays", result.n_rays);
+//!
+//! for ray in &result.rays {
+//!     if ray.ground {
+//!         println!("  {:.0}° → {:.0} km", ray.elev, ray.range_km);
+//!     }
+//! }
+//! ```
+//!
+//! # Target Solver
+//!
+//! Find the elevation/azimuth to hit a specific location:
+//!
+//! ```
+//! use ionotrace::{solve_target, TargetConfig, SearchSpec};
+//!
+//! let config = TargetConfig {
+//!     target_lat_deg: 50.0,   // target latitude
+//!     target_lon_deg: 5.0,    // target longitude
+//!     tx_lat_deg: 40.0,       // transmitter latitude
+//!     freq_mhz: SearchSpec::Fixed(10.0),
+//!     error_limit_km: 20.0,
+//!     ..TargetConfig::default()
+//! };
+//!
+//! let result = solve_target(&config).unwrap();
+//! if let Some(best) = &result.best {
+//!     println!("Aim: {:.1}° elev, {:.1}° az → {:.1} km error",
+//!         best.elevation_deg, best.azimuth_deg, best.error_km);
+//! }
+//! ```
+//!
+//! # Exporting
+//!
+//! Save results to CSV or JSON:
+//!
+//! ```
+//! use ionotrace::{TraceConfig, export_trace_csv, export_json};
+//!
+//! let result = TraceConfig::new(10.0, 20.0).trace().unwrap();
+//! let csv = export_trace_csv(&result).unwrap();
+//! let json = export_json(&result).unwrap();
+//! ```
+//!
+//! # Physics Models
+//!
+//! The engine is modular — swap models independently:
+//!
+//! | Component | Options |
+//! |-----------|---------|
+//! | Electron density | Chapman, ELECT1, Linear, Quasi-Parabolic, Variable Chapman, Dual Chapman |
+//! | Magnetic field | Dipole, Constant, Cubic, IGRF-14 |
+//! | Refractive index | Full Appleton-Hartree, with/without field and collisions |
+//! | Collisions | Double-exponential, Single-exponential, Constant |
+//! | Perturbations | Torus, Trough, Shock, Bulge, Exponential |
+//!
+//! See [`params`] for all configuration options.
 
 #[cfg(target_arch = "wasm32")]
 use serde::{Deserialize, Serialize};

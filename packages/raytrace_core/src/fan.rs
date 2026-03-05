@@ -1,4 +1,23 @@
-//! Fan tracing API for computing multiple rays across an elevation spread.
+//! Fan tracing — sweep a range of elevation angles in one call.
+//!
+//! A "fan trace" fires multiple rays at different elevation angles through
+//! the same ionosphere, producing a complete picture of how ray paths vary
+//! with launch angle. On native builds, the sweep is parallelized via Rayon.
+//!
+//! # Example
+//!
+//! ```
+//! use ionotrace::{fan_trace, FanTraceConfig};
+//!
+//! let result = fan_trace(&FanTraceConfig::default()).unwrap();
+//!
+//! for ray in &result.rays {
+//!     if ray.ground {
+//!         println!("{:.0}° → {:.0} km, max height {:.0} km",
+//!             ray.elev, ray.range_km, ray.max_h);
+//!     }
+//! }
+//! ```
 
 use crate::error::TraceError;
 use crate::params::ModelParams;
@@ -9,18 +28,42 @@ use serde::{Deserialize, Serialize};
 use rayon::prelude::*;
 
 /// Configuration for a fan of rays.
+///
+/// Use struct update syntax with [`Default`] for concise setup:
+///
+/// ```
+/// use ionotrace::FanTraceConfig;
+///
+/// let config = FanTraceConfig {
+///     freq_mhz: 15.0,
+///     elev_min: 10.0,
+///     elev_max: 70.0,
+///     ..FanTraceConfig::default()
+/// };
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FanTraceConfig {
+    /// Transmit frequency in MHz. Must be > 0.
     pub freq_mhz: f64,
+    /// Ray mode: `1.0` = ordinary, `-1.0` = extraordinary. See [`params::RayMode`](crate::params::RayMode).
     pub ray_mode: f64,
+    /// Minimum elevation angle in degrees.
     pub elev_min: f64,
+    /// Maximum elevation angle in degrees.
     pub elev_max: f64,
+    /// Step between elevation angles in degrees.
     pub elev_step: f64,
+    /// Azimuth angle in degrees (0 = north, 90 = east).
     pub azimuth_deg: f64,
+    /// Transmitter latitude in degrees (positive = north).
     pub tx_lat_deg: f64,
+    /// Integration step size in km.
     pub step_size: f64,
+    /// Maximum integration steps per ray.
     pub max_steps: usize,
+    /// Maximum number of ground-reflection hops (1–5).
     pub max_hops: u8,
+    /// Physics model parameters. See [`ModelParams`].
     pub params: ModelParams,
 }
 
@@ -45,43 +88,62 @@ impl Default for FanTraceConfig {
 /// A point along a fan ray trajectory.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FanRayPoint {
+    /// Height above Earth's surface in km.
     pub h: f64,
+    /// Integration time parameter.
     pub t: f64,
+    /// Geographic latitude in degrees.
     pub lat: f64,
+    /// Geographic longitude in degrees (relative to TX).
     pub lon: f64,
+    /// Cumulative ground range in km.
     pub range: f64,
 }
 
 /// Summary of a single completed hop within a ray trace.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HopSummary {
+    /// Cumulative ground range after this hop in km.
     pub range_km: f64,
+    /// Landing latitude in degrees.
     pub lat: f64,
+    /// Landing longitude in degrees.
     pub lon: f64,
+    /// Cumulative absorption after this hop in dB.
     pub absorption: f64,
 }
 
 /// A single completed ray within a fan trace.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FanRay {
+    /// Launch elevation angle in degrees.
     pub elev: f64,
+    /// Maximum height reached in km.
     pub max_h: f64,
+    /// Whether the ray returned to ground.
     pub ground: bool,
+    /// Total ground range in km (0 if ray escaped).
     pub range_km: f64,
+    /// Number of completed ground-reflection hops.
     pub hops: u8,
+    /// Total absorption in dB.
     pub absorption: f64,
     /// Landing latitude in degrees (geographic). 0.0 if ray escaped.
     pub landing_lat: f64,
     /// Landing longitude in degrees (relative, phi=0 at TX). 0.0 if ray escaped.
     pub landing_lon: f64,
+    /// Full ray path as a series of points.
     pub pts: Vec<FanRayPoint>,
+    /// Per-hop landing summaries.
     pub hop_summaries: Vec<HopSummary>,
 }
 
 /// The result of a complete fan trace operation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FanTraceResult {
+    /// All traced rays, one per elevation angle.
     pub rays: Vec<FanRay>,
+    /// Total number of rays traced.
     pub n_rays: usize,
 }
 
