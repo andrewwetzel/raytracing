@@ -49,6 +49,18 @@ let showIonoLayers = true;
 // 3D globe view
 let viewMode = '3d'; // '2d' or '3d'
 let globeInitialized = false;
+let globePickMode = null; // null = no pick active, 'tx' or 'rx'
+
+function resetGlobePick() {
+  globePickMode = null;
+  document.getElementById('tx-globe-pick-btn')?.classList.remove('active-pick');
+  document.getElementById('rx-globe-pick-btn')?.classList.remove('active-pick');
+  const hint = document.getElementById('globe-hint');
+  if (hint) {
+    hint.style.display = 'none';
+    hint.className = 'globe-hint';
+  }
+}
 
 // Distinct colors for up to 16 comparison groups
 const GROUP_COLORS = [
@@ -2017,20 +2029,6 @@ function wireControls() {
   });
 
   // Globe select buttons
-  let globePickMode = null; // default null, only pick on explicit command
-
-  function resetGlobePick() {
-    globePickMode = null;
-    document.getElementById('tx-globe-pick-btn')?.classList.remove('active-pick');
-    document.getElementById('rx-globe-pick-btn')?.classList.remove('active-pick');
-
-    // Hide and reset globe hints
-    const hint = document.getElementById('globe-hint');
-    if (hint) {
-      hint.style.display = 'none';
-      hint.className = 'globe-hint';
-    }
-  }
 
   document.getElementById('tx-globe-pick-btn')?.addEventListener('click', () => {
     if (globePickMode === 'tx') {
