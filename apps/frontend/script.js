@@ -7,7 +7,7 @@
  * All computation runs client-side via WebAssembly.
  */
 
-import init, { trace_fan_wasm } from './pkg/ionotrace.js';
+import init, { trace_fan_wasm, solve_target_wasm } from './pkg/ionotrace.js';
 import { initGlobe, updateGlobeRays, setGlobeVisible, onGlobeClick, lookAtLocation } from './globe3d.js';
 
 // ============================================================
@@ -22,7 +22,7 @@ let lastTraceBody = null;
 let currentMode = 'fan'; // 'fan' or 'target'
 let targetMarkerRange = null; // km — if set, draw a marker on Earth at this ground range
 let isTargeting = false; // true while bisection is in progress
-let targetSubMode = 'quick'; // 'quick' or 'advanced'
+let targetSubMode = 'quick'; // kept for legacy, always 'quick' now
 let stopTargeting = false; // set to true to cancel bisection
 
 // Camera state (zoom & pan)
@@ -1428,107 +1428,6 @@ function wireModeSwitching() {
 // Bisection targeting
 // ============================================================
 
-// Search variable configs: maps dropdown value to properties
-const SEARCH_VAR_CONFIG = {
-  elev: {
-    label: 'Search Elevation Range (°)',
-    logLabel: 'Elev°',
-    unit: '°',
-    min: 1, max: 89, step: 0.5,
-    defaultLo: 1, defaultHi: 60,
-    fanSteps: 20,
-    // For elevation, the search var IS the elevation
-    applyToConfig: (config, val) => ({
-      ...config,
-      elev_min: val,
-      elev_max: val,
-      elev_step: 1.0,
-    }),
-    getFromConfig: (config) => config.elev_min,
-    // Higher elevation = shorter range (generally)
-    rangeDirection: 'inverse',
-  },
-  freq: {
-    label: 'Search Frequency Range (MHz)',
-    logLabel: 'Freq',
-    unit: ' MHz',
-    min: 2, max: 30, step: 0.5,
-    defaultLo: 5, defaultHi: 25,
-    fanSteps: 20,
-    applyToConfig: (config, val) => ({
-      ...config,
-      freq_mhz: val,
-    }),
-    getFromConfig: (config) => config.freq_mhz,
-    rangeDirection: 'direct', // Higher freq = longer range (penetrates more)
-  },
-  fc: {
-    label: 'Search foF2 Range (MHz)',
-    logLabel: 'foF2',
-    unit: ' MHz',
-    min: 2, max: 20, step: 0.5,
-    defaultLo: 4, defaultHi: 15,
-    fanSteps: 20,
-    applyToConfig: (config, val) => ({
-      ...config,
-      fc: val,
-    }),
-    getFromConfig: (config) => config.fc,
-    rangeDirection: 'inverse', // Higher foF2 = shorter range (reflects sooner)
-  },
-  hm: {
-    label: 'Search hmF2 Range (km)',
-    logLabel: 'hmF2',
-    unit: ' km',
-    min: 150, max: 400, step: 10,
-    defaultLo: 150, defaultHi: 400,
-    fanSteps: 15,
-    applyToConfig: (config, val) => ({
-      ...config,
-      hm: val,
-    }),
-    getFromConfig: (config) => config.hm,
-    rangeDirection: 'direct', // Higher hm = longer range
-  },
-  sh: {
-    label: 'Search Scale Height Range (km)',
-    logLabel: 'SH',
-    unit: ' km',
-    min: 30, max: 200, step: 5,
-    defaultLo: 40, defaultHi: 180,
-    fanSteps: 15,
-    applyToConfig: (config, val) => ({
-      ...config,
-      sh: val,
-    }),
-    getFromConfig: (config) => config.sh,
-    rangeDirection: 'direct',
-  },
-};
-
-/** Wire the search variable selector to update labels and input bounds */
-function wireSearchVarSelector() {
-  const sel = document.getElementById('target-search-var');
-  const minInput = document.getElementById('target-search-min');
-  const maxInput = document.getElementById('target-search-max');
-  const label = document.getElementById('target-range-label');
-
-  sel.addEventListener('change', () => {
-    const cfg = SEARCH_VAR_CONFIG[sel.value];
-    label.textContent = cfg.label;
-    minInput.min = cfg.min;
-    minInput.max = cfg.max;
-    minInput.step = cfg.step;
-    minInput.value = cfg.defaultLo;
-    maxInput.min = cfg.min;
-    maxInput.max = cfg.max;
-    maxInput.step = cfg.step;
-    maxInput.value = cfg.defaultHi;
-  });
-
-  // Initialize
-  sel.dispatchEvent(new Event('change'));
-}
 
 async function targetBisection() {
   if (isTargeting) return;
@@ -1538,393 +1437,184 @@ async function targetBisection() {
   const stopBtn = document.getElementById('target-stop-btn');
   btn.classList.add('loading');
   btn.querySelector('.btn-icon').textContent = '⟳';
+  btn.querySelector('.btn-label').textContent = 'Solving...';
   stopBtn.style.display = 'flex';
   stopTargeting = false;
 
-  const targetRange = parseFloat(document.getElementById('target-range').value);
   const tolerance = parseFloat(document.getElementById('target-tolerance').value);
-  const searchVar = document.getElementById('target-search-var').value;
-  let searchLo = parseFloat(document.getElementById('target-search-min').value);
-  let searchHi = parseFloat(document.getElementById('target-search-max').value);
-  const maxIter = parseInt(document.getElementById('target-max-iter').value);
-  const varCfg = SEARCH_VAR_CONFIG[searchVar];
+  const maxHops = parseInt(document.getElementById('max-hops')?.value || '1');
+  const searchLo = parseFloat(document.getElementById('target-search-min').value);
+  const searchHi = parseFloat(document.getElementById('target-search-max').value);
 
   const logBody = document.getElementById('target-log-body');
-  logBody.innerHTML = `<div class="target-log-row header"><span>#</span><span>${varCfg.logLabel}</span><span>Range</span><span>Error</span><span>Lateral</span></div>`;
+  logBody.innerHTML = `<div class="target-log-row header"><span>#</span><span>Elev / Az</span><span>Range</span><span>Error</span><span>Landing</span></div>`;
 
-  targetMarkerRange = targetRange;
   traceGroups = [];
 
-  // Build base config from current parameter settings
-  const baseElev = parseFloat(document.getElementById('elev-min').value);
-  const baseConfig = {
-    freq_mhz: parseFloat(document.getElementById('freq').value),
+  // Determine target: use RX lat/lon if set, otherwise compute from target-range
+  let targetLat, targetLon;
+  const rxLat = getRxLat();
+  const rxLon = getRxLon();
+  const txLat = getTxLat();
+  const txLon = getTxLon();
+
+  if (rxLat !== null && rxLon !== null) {
+    // RX destination is set — compute target relative coordinates
+    targetLat = rxLat;
+    targetLon = rxLon - txLon; // relative longitude
+  } else {
+    // Fallback: use target-range to estimate a target lat along the azimuth
+    const targetRange = parseFloat(document.getElementById('target-range').value);
+    const az = getAzimuth();
+    const R = 6371;
+    const toRad = Math.PI / 180;
+    const d = targetRange / R;
+    const φ1 = txLat * toRad;
+    const λ1 = 0; // relative longitude
+    const θ = az * toRad;
+    targetLat = Math.asin(Math.sin(φ1) * Math.cos(d) + Math.cos(φ1) * Math.sin(d) * Math.cos(θ)) / toRad;
+    targetLon = (λ1 + Math.atan2(Math.sin(θ) * Math.sin(d) * Math.cos(φ1), Math.cos(d) - Math.sin(φ1) * Math.sin(targetLat * toRad))) / toRad;
+    targetMarkerRange = targetRange;
+  }
+
+  // Always bisect elevation, use freq from unified params
+  const baseFreq = parseFloat(document.getElementById('target-freq-min').value);
+  const baseAz = getAzimuth();
+
+  const solverConfig = {
+    target_lat_deg: targetLat,
+    target_lon_deg: targetLon,
+    tx_lat_deg: txLat,
+    freq_mhz: baseFreq,
+    azimuth_deg: baseAz,
     ray_mode: parseFloat(getCheckedValues('ray-mode-group', true)[0] || -1),
-    elev_min: baseElev,
-    elev_max: baseElev,
-    elev_step: 1.0,
-    azimuth_deg: getAzimuth(),
-    tx_lat_deg: getTxLat(),
-    fc: parseFloat(document.getElementById('fc').value),
-    hm: parseFloat(document.getElementById('hm').value),
-    sh: parseFloat(document.getElementById('sh').value),
-    fh: parseFloat(document.getElementById('fh').value),
+    elev_min: searchLo,
+    elev_max: searchHi,
+    coarse_step: 2.0,
+    error_limit_km: tolerance,
+    max_bisect_iters: 30,
+    max_nm_iters: 100,
+    max_hops: maxHops,
     step_size: 1.0,
     max_steps: 2000,
-    ed_model: parseInt(getCheckedValues('ed-model-group')[0] || 0),
-    mag_model: parseInt(getCheckedValues('mag-model-group')[0] || 0),
-    rindex_model: parseInt(getCheckedValues('rindex-model-group')[0] || 0),
-    pert_model: parseInt(getCheckedValues('pert-model-group')[0] || 0),
+    include_ray_path: true,
+    params: {
+      earth_r: 6370.0,
+      ed_model: parseInt(getCheckedValues('ed-model-group')[0] || 0),
+      mag_model: parseInt(getCheckedValues('mag-model-group')[0] || 0),
+      col_model: 0,
+      rindex_model: parseInt(getCheckedValues('rindex-model-group')[0] || 0),
+      pert_model: parseInt(getCheckedValues('pert-model-group')[0] || 0),
+      fc: parseFloat(document.getElementById('target-fc-min').value),
+      hm: parseFloat(document.getElementById('target-hm-min').value),
+      sh: parseFloat(document.getElementById('target-sh-min').value),
+      alpha: 0.5,
+      ed_a: 0.0, ed_b: 0.0, ed_c: 0.0, ed_e: 0.0,
+      ym: 100.0,
+      fc2: 0.0, hm2: 0.0, sh2: 0.0,
+      chi: 3.0,
+      fh: parseFloat(document.getElementById('fh').value),
+      dip: 0.0,
+      epoch_year: 2025.0,
+      nu1: 1050000.0, h1: 100.0, a1: 0.148,
+      nu2: 30.0, h2: 140.0, a2: 0.0183,
+      p1: 0.0, p2: 0.0, p3: 0.0, p4: 0.0, p5: 0.0,
+      p6: 0.0, p7: 0.0, p8: 0.0, p9: 0.0,
+    },
   };
 
-  // For elevation search, use the base elevation from the main slider
-  // For other vars, fix elevation at the current slider value
-  if (searchVar !== 'elev') {
-    const elev = parseFloat(document.getElementById('elev-min').value);
-    baseConfig.elev_min = elev;
-    baseConfig.elev_max = elev;
+  // Yield to UI
+  await new Promise(r => setTimeout(r, 10));
+
+  let result;
+  try {
+    const resultJson = solve_target_wasm(JSON.stringify(solverConfig));
+    result = JSON.parse(resultJson);
+  } catch (err) {
+    console.error('Target solver error:', err);
+    logBody.innerHTML += `<div class="target-log-row escape"><span>—</span><span colspan="4">⚠ Solver failed: ${err.message || err}</span></div>`;
+    btn.classList.remove('loading');
+    btn.querySelector('.btn-icon').textContent = '🎯';
+    btn.querySelector('.btn-label').textContent = 'Find Path';
+    stopBtn.style.display = 'none';
+    isTargeting = false;
+    return;
   }
 
-  // ---- Phase 1: Fan sweep to show min/max range ----
-  const fanSteps = varCfg.fanSteps;
-  const fanStep = (searchHi - searchLo) / fanSteps;
-  let fanRanges = [];
-  let fanReturned = 0;
-  let fanEscaped = 0;
+  if (result.error) {
+    logBody.innerHTML += `<div class="target-log-row escape"><span>—</span><span colspan="4">⚠ ${result.error}</span></div>`;
+  }
 
-  btn.querySelector('.btn-label').textContent = 'Scanning...';
+  // Display solutions
+  const solutions = result.solutions || [];
+  const found = solutions.length > 0;
 
-  for (let i = 0; i <= fanSteps; i++) {
-    if (stopTargeting) break;
-    const val = searchLo + i * fanStep;
-    const body = varCfg.applyToConfig({ ...baseConfig }, val);
+  for (let i = 0; i < solutions.length; i++) {
+    const sol = solutions[i];
+    const isBest = i === 0;
+    const rowClass = sol.error_km <= tolerance ? 'success' : 'fail';
+    const landingStr = `${sol.landing_lat_deg.toFixed(2)}°, ${sol.landing_lon_deg.toFixed(2)}°`;
+    logBody.innerHTML += `<div class="target-log-row ${rowClass}"><span>${i + 1}</span><span>${sol.elevation_deg.toFixed(2)}° / ${sol.azimuth_deg.toFixed(1)}°</span><span>${sol.range_km.toFixed(1)} km</span><span>${sol.error_km.toFixed(1)} km</span><span>${landingStr}</span></div>`;
 
-    try {
-      const resultJson = trace_fan_wasm(JSON.stringify(body));
-      const data = JSON.parse(resultJson);
-      if (data.rays && data.rays.length > 0) {
-        const ray = data.rays[0];
-        if (ray.ground && ray.range_km > 0) {
-          fanRanges.push({ val, range: ray.range_km });
-          fanReturned++;
-        } else {
-          fanEscaped++;
-        }
-      }
-
-      // Visualize the fan scan live
+    // Build trace group from ray path for visualization
+    if (sol.ray_path && sol.ray_path.length > 0) {
+      const pts = sol.ray_path.map(pt => ({
+        h: pt.height_km,
+        t: pt.t,
+        range: pt.ground_range_km,
+      }));
+      const fakeRay = {
+        elev: sol.elevation_deg,
+        max_h: sol.max_height_km,
+        ground: true,
+        range_km: sol.range_km,
+        hops: sol.hops,
+        absorption: sol.absorption,
+        landing_lat: sol.landing_lat_deg,
+        landing_lon: sol.landing_lon_deg,
+        pts,
+      };
       traceGroups.push({
-        label: `${varCfg.logLabel}: ${val.toFixed(2)}`,
-        color: '#475569',
-        rays: data.rays || [],
-        config: body
+        label: isBest
+          ? `✅ ${sol.elevation_deg.toFixed(1)}° → ${sol.range_km.toFixed(0)} km (err ${sol.error_km.toFixed(1)})`
+          : `${sol.elevation_deg.toFixed(1)}° → ${sol.range_km.toFixed(0)} km`,
+        color: isBest ? '#10b981' : '#6366f1',
+        rays: [fakeRay],
+        config: solverConfig,
       });
-      render();
-      if (viewMode === '3d') updateGlobeRays(traceGroups, getTxLat(), getTxLon(), getRxLat(), getRxLon());
-      updateLegend();
-      await new Promise(r => setTimeout(r, 10)); // yield to UI
-    } catch (err) {
-      console.error('Fan sweep error:', err);
     }
   }
 
-  // Clear trace groups from fan scan before bisection
-  traceGroups = [];
-
-  // Display fan sweep summary
+  // Show solver stats
   const summary = document.getElementById('target-range-summary');
   summary.style.display = 'block';
-  const minRange = fanRanges.length > 0 ? Math.min(...fanRanges.map(r => r.range)) : null;
-  const maxRange = fanRanges.length > 0 ? Math.max(...fanRanges.map(r => r.range)) : null;
-
-  document.getElementById('fan-range-min').textContent = minRange !== null ? `${minRange.toFixed(0)} km` : '—';
-  document.getElementById('fan-range-max').textContent = maxRange !== null ? `${maxRange.toFixed(0)} km` : '—';
-  document.getElementById('fan-returned-count').textContent = `${fanReturned}/${fanSteps + 1}`;
-  document.getElementById('fan-escaped-count').textContent = `${fanEscaped}/${fanSteps + 1}`;
+  document.getElementById('fan-range-min').textContent = solutions.length > 0 ? `${Math.min(...solutions.map(s => s.range_km)).toFixed(0)} km` : '—';
+  document.getElementById('fan-range-max').textContent = solutions.length > 0 ? `${Math.max(...solutions.map(s => s.range_km)).toFixed(0)} km` : '—';
+  document.getElementById('fan-returned-count').textContent = `${solutions.length}`;
+  document.getElementById('fan-escaped-count').textContent = `${result.rays_traced || 0}`;
 
   const hintEl = document.getElementById('fan-range-hint');
-  if (fanRanges.length === 0) {
-    hintEl.textContent = '⚠ No rays returned to ground. Try wider range or different parameters.';
-    hintEl.className = 'range-hint';
-  } else if (targetRange < minRange) {
-    hintEl.textContent = `⚠ Target ${targetRange} km is below the min range ${minRange.toFixed(0)} km. Try ${varCfg.rangeDirection === 'inverse' ? 'increasing' : 'decreasing'} the ${varCfg.logLabel} range.`;
-    hintEl.className = 'range-hint';
-  } else if (targetRange > maxRange) {
-    hintEl.textContent = `⚠ Target ${targetRange} km is above the max range ${maxRange.toFixed(0)} km. Try ${varCfg.rangeDirection === 'inverse' ? 'decreasing' : 'increasing'} the ${varCfg.logLabel} range.`;
-    hintEl.className = 'range-hint';
-  } else {
-    hintEl.textContent = `✅ Target ${targetRange} km is within reachable range [${minRange.toFixed(0)}–${maxRange.toFixed(0)} km].`;
+  if (found) {
+    const best = solutions[0];
+    hintEl.textContent = `✅ Best: ${best.elevation_deg.toFixed(2)}° elev, ${best.azimuth_deg.toFixed(1)}° az → error ${best.error_km.toFixed(1)} km (${result.rays_traced} rays in ${(result.elapsed_ms || 0).toFixed(0)} ms)`;
     hintEl.className = 'range-hint good';
+  } else {
+    hintEl.textContent = `⚠ No solution within ${tolerance} km tolerance. ${result.rays_traced} rays traced.`;
+    hintEl.className = 'range-hint';
   }
 
-  // If target is not in range, still proceed but warn
-  btn.querySelector('.btn-label').textContent = 'Bisecting...';
+  logBody.scrollTop = logBody.scrollHeight;
 
-  // ---- Interleaved Range ↔ Azimuth Bisection ----
-  let found = false;
-  let bestRay = null;
-  let bestVal = null;
-  let bestError = Infinity;
-  let currentAz = getAzimuth();
-  const maxOuterCycles = 5;
+  // Update stats header
+  document.getElementById('stat-rays').textContent = `${result.rays_traced || 0} rays`;
+  document.getElementById('stat-time').textContent = found
+    ? `✅ ${(result.elapsed_ms || 0).toFixed(0)} ms`
+    : '⚠ not found';
 
-  // Keep all rays visible during iteration
-  // (pruning made rays disappear; users want to see all steps)
-
-  for (let cycle = 0; cycle < maxOuterCycles; cycle++) {
-    if (stopTargeting) break;
-
-    // ---- Range bisection pass ----
-    btn.querySelector('.btn-label').textContent = cycle === 0 ? 'Bisecting...' : `Refining range (cycle ${cycle + 1})...`;
-    if (cycle > 0) {
-      logBody.innerHTML += `<div class="target-log-row header"><span>#</span><span>${varCfg.logLabel}</span><span>Range</span><span>Error</span><span>Lateral</span></div>`;
-    }
-
-    let rangeConverged = false;
-    let cycleSearchLo = searchLo;
-    let cycleSearchHi = searchHi;
-
-    for (let iter = 0; iter < maxIter; iter++) {
-      if (stopTargeting) break;
-      const searchMid = (cycleSearchLo + cycleSearchHi) / 2;
-
-      const body = varCfg.applyToConfig({ ...baseConfig }, searchMid);
-      body.azimuth_deg = currentAz;
-
-      let data;
-      try {
-        const resultJson = trace_fan_wasm(JSON.stringify(body));
-        data = JSON.parse(resultJson);
-      } catch (err) {
-        console.error('Bisection trace error:', err);
-        break;
-      }
-
-      if (!data.rays || data.rays.length === 0) break;
-      const ray = data.rays[0];
-
-      const isGround = ray.ground;
-      const range = isGround ? ray.range_km : null;
-      const error = isGround ? Math.abs(range - targetRange) : null;
-
-      // Track best result
-      if (isGround && error < bestError) {
-        bestError = error;
-        bestRay = ray;
-        bestVal = searchMid;
-      }
-
-      // Add to trace groups for visualization
-      const groupColor = !isGround ? '#334155' : (range > targetRange ? '#f59e0b' : '#3b82f6');
-      traceGroups.push({
-        label: `${searchMid.toFixed(2)}${varCfg.unit} → ${isGround ? range + ' km' : 'escaped'}`,
-        color: groupColor,
-        rays: [ray],
-        config: body,
-      });
-
-      // Compute lateral error
-      let lateralStr = '—';
-      const rxLat = getRxLat();
-      const rxLon = getRxLon();
-      if (isGround && rxLat !== null && rxLon !== null) {
-        const landLat = ray.landing_lat;
-        const landLon = ray.landing_lon + getTxLon();
-        const ctErr = computeCrossTrackError(getTxLat(), getTxLon(), rxLat, rxLon, landLat, landLon);
-        const dir = ctErr.crossTrack_km >= 0 ? 'R' : 'L';
-        lateralStr = `${Math.abs(ctErr.crossTrack_km).toFixed(1)} ${dir}`;
-      }
-
-      // Log entry
-      const rowClass = !isGround ? 'escape' : (error <= tolerance ? 'success' : 'fail');
-      const rangeStr = isGround ? `${range} km` : 'escaped';
-      const errorStr = isGround ? `${error.toFixed(1)} km` : '—';
-      const valStr = searchMid.toFixed(4) + varCfg.unit;
-      logBody.innerHTML += `<div class="target-log-row ${rowClass}"><span>${iter + 1}</span><span>${valStr}</span><span>${rangeStr}</span><span>${errorStr}</span><span>${lateralStr}</span></div>`;
-      logBody.scrollTop = logBody.scrollHeight;
-
-      render();
-      if (viewMode === '3d') updateGlobeRays(traceGroups, getTxLat(), getTxLon(), getRxLat(), getRxLon());
-      updateLegend();
-      await new Promise(r => setTimeout(r, 10));
-
-      // Check range convergence
-      if (isGround && error <= tolerance) {
-        rangeConverged = true;
-        break;
-      }
-
-      // Bisection logic
-      if (!isGround) {
-        if (varCfg.rangeDirection === 'inverse') cycleSearchLo = searchMid;
-        else cycleSearchHi = searchMid;
-      } else if (range < targetRange) {
-        if (varCfg.rangeDirection === 'inverse') cycleSearchHi = searchMid;
-        else cycleSearchLo = searchMid;
-      } else {
-        if (varCfg.rangeDirection === 'inverse') cycleSearchLo = searchMid;
-        else cycleSearchHi = searchMid;
-      }
-
-      await new Promise(r => setTimeout(r, 40));
-    }
-
-    // Early stopping: if range never converged and this is cycle > 0, give up
-    if (!rangeConverged && cycle > 0) {
-      logBody.innerHTML += `<div class="target-log-row escape"><span>—</span><span colspan="4">⚠ Range did not re-converge after azimuth adjustment — stopping</span></div>`;
-      break;
-    }
-    // Early stopping: if range never converged on first cycle, still try azimuth but mark as not found
-    if (!rangeConverged && !bestRay) {
-      logBody.innerHTML += `<div class="target-log-row escape"><span>—</span><span colspan="4">⚠ No ground ray found — target may be unreachable</span></div>`;
-      break;
-    }
-
-    // Mark the best range result
-    if (rangeConverged && bestRay) {
-      // Show the converged ray as success
-      const successGroup = {
-        label: `✅ ${bestVal.toFixed(2)}${varCfg.unit} → ${bestRay.range_km} km`,
-        color: '#10b981',
-        rays: [bestRay],
-        config: varCfg.applyToConfig({ ...baseConfig }, bestVal),
-      };
-      traceGroups.push(successGroup);
-      render();
-      if (viewMode === '3d') updateGlobeRays(traceGroups, getTxLat(), getTxLon(), getRxLat(), getRxLon());
-      updateLegend();
-    }
-
-    // ---- Azimuth correction pass ----
-    if (!bestRay) break;
-    const rxLat = getRxLat();
-    const rxLon = getRxLon();
-    if (rxLat === null || rxLon === null) { found = rangeConverged; break; }
-
-    const landLat0 = bestRay.landing_lat;
-    const landLon0 = bestRay.landing_lon + getTxLon();
-    const ctErr0 = computeCrossTrackError(getTxLat(), getTxLon(), rxLat, rxLon, landLat0, landLon0);
-
-    if (Math.abs(ctErr0.crossTrack_km) <= tolerance) {
-      found = true;
-      break; // Both range and lateral are within tolerance!
-    }
-
-    btn.querySelector('.btn-label').textContent = `Correcting azimuth (cycle ${cycle + 1})...`;
-    logBody.innerHTML += `<div class="target-log-row header"><span>#</span><span>Azimuth</span><span>Range</span><span>Error</span><span>Lateral</span></div>`;
-
-    let azLo = currentAz - 5;
-    let azHi = currentAz + 5;
-    let bestAzCross = ctErr0.crossTrack_km;
-    let bestAz = currentAz;
-    const maxAzIter = 10;
-
-    for (let azIter = 0; azIter < maxAzIter; azIter++) {
-      if (stopTargeting) break;
-      const azMid = (azLo + azHi) / 2;
-
-      const azBody = varCfg.applyToConfig({ ...baseConfig }, bestVal);
-      azBody.azimuth_deg = azMid;
-
-      let azData;
-      try {
-        const resultJson = trace_fan_wasm(JSON.stringify(azBody));
-        azData = JSON.parse(resultJson);
-      } catch (err) {
-        console.error('Azimuth correction trace error:', err);
-        break;
-      }
-
-      if (!azData.rays || azData.rays.length === 0) break;
-      const azRay = azData.rays[0];
-
-      if (!azRay.ground) {
-        if (azMid < currentAz) azLo = azMid;
-        else azHi = azMid;
-        logBody.innerHTML += `<div class="target-log-row escape"><span>Az${azIter + 1}</span><span>${azMid.toFixed(2)}°</span><span>escaped</span><span>—</span><span>—</span></div>`;
-      } else {
-        const azLandLat = azRay.landing_lat;
-        const azLandLon = azRay.landing_lon + getTxLon();
-        const azCtErr = computeCrossTrackError(getTxLat(), getTxLon(), rxLat, rxLon, azLandLat, azLandLon);
-        const azCross = azCtErr.crossTrack_km;
-        const azRange = azRay.range_km;
-        const azRangeErr = Math.abs(azRange - targetRange);
-
-        if (Math.abs(azCross) < Math.abs(bestAzCross)) {
-          bestAzCross = azCross;
-          bestAz = azMid;
-        }
-
-        const dir = azCross >= 0 ? 'R' : 'L';
-        const azRowClass = Math.abs(azCross) <= tolerance ? 'success' : 'fail';
-        logBody.innerHTML += `<div class="target-log-row ${azRowClass}"><span>Az${azIter + 1}</span><span>${azMid.toFixed(2)}°</span><span>${azRange} km</span><span>${azRangeErr.toFixed(1)} km</span><span>${Math.abs(azCross).toFixed(1)} ${dir}</span></div>`;
-        logBody.scrollTop = logBody.scrollHeight;
-
-        render();
-        if (viewMode === '3d') updateGlobeRays(traceGroups, getTxLat(), getTxLon(), rxLat, rxLon);
-        updateLegend();
-
-        if (Math.abs(azCross) <= tolerance) {
-          // Also check if range is still good
-          if (azRangeErr <= tolerance) {
-            found = true;
-            bestRay = azRay;
-            currentAz = azMid;
-            // Update success group
-            const finalGroup = {
-              label: `✅ Az ${azMid.toFixed(2)}° → ${azRange} km (${Math.abs(azCross).toFixed(1)} km ${dir})`,
-              color: '#10b981',
-              rays: [azRay],
-              config: azBody,
-            };
-            traceGroups.push(finalGroup);
-            render();
-            if (viewMode === '3d') updateGlobeRays(traceGroups, getTxLat(), getTxLon(), rxLat, rxLon);
-            updateLegend();
-          }
-          break;
-        }
-
-        if (azCross > 0) azHi = azMid;
-        else azLo = azMid;
-      }
-
-      await new Promise(r => setTimeout(r, 40));
-    }
-
-    // Update azimuth for next cycle
-    currentAz = bestAz;
-
-    if (found) break;
-
-    // Log azimuth result
-    const finalDir = bestAzCross >= 0 ? 'R' : 'L';
-    if (Math.abs(bestAzCross) <= tolerance) {
-      logBody.innerHTML += `<div class="target-log-row success"><span>—</span><span colspan="4">✅ Azimuth → ${bestAz.toFixed(2)}° (lateral: ${Math.abs(bestAzCross).toFixed(1)} km ${finalDir})</span></div>`;
-    } else {
-      logBody.innerHTML += `<div class="target-log-row fail"><span>—</span><span colspan="4">↻ Azimuth → ${bestAz.toFixed(2)}° (lateral: ${Math.abs(bestAzCross).toFixed(1)} km ${finalDir}) — re-bisecting range...</span></div>`;
-    }
-
-    await new Promise(r => setTimeout(r, 100));
+  // Update target marker
+  if (found) {
+    targetMarkerRange = solutions[0].range_km;
   }
-
-  // If best result exists but not within tolerance, still highlight it
-  if (!found && bestRay) {
-    const valStr = bestVal.toFixed(2) + varCfg.unit;
-    logBody.innerHTML += `<div class="target-log-row fail"><span>—</span><span>Best: ${valStr}</span><span>${bestRay.range_km} km</span><span>${bestError.toFixed(1)} km</span><span>—</span></div>`;
-    // Show best ray as final result
-    traceGroups.push({
-      label: `Best: ${valStr} → ${bestRay.range_km} km`,
-      color: '#f59e0b',
-      rays: [bestRay],
-      config: varCfg.applyToConfig({ ...baseConfig }, bestVal),
-    });
-  }
-
-  // Update stats
-  const totalRays = traceGroups.reduce((s, g) => s + g.rays.length, 0);
-  document.getElementById('stat-rays').textContent = `${totalRays} rays`;
-  document.getElementById('stat-time').textContent = found ? '✅ found' : '⚠ not converged';
 
   btn.classList.remove('loading');
   btn.querySelector('.btn-icon').textContent = '🎯';
@@ -1933,273 +1623,25 @@ async function targetBisection() {
   isTargeting = false;
   stopTargeting = false;
 
-  // Guarantee final trace representation syncs onto UI correctly
   render();
-  updateGlobeRays(traceGroups, getTxLat(), getTxLon(), getRxLat(), getRxLon());
-}
-
-// ============================================================
-// Advanced target search
-// ============================================================
-
-/** Build sweep values: [min, min+step, ..., max] or [fixedValue] */
-function buildSweepRange(checkboxId, minId, maxId, stepId, fixedId) {
-  const checked = document.getElementById(checkboxId)?.checked;
-  if (!checked) return [parseFloat(document.getElementById(fixedId).value)];
-  const lo = parseFloat(document.getElementById(minId).value);
-  const hi = parseFloat(document.getElementById(maxId).value);
-  const step = parseFloat(document.getElementById(stepId).value);
-  const vals = [];
-  for (let v = lo; v <= hi + step * 0.01; v += step) vals.push(parseFloat(v.toFixed(4)));
-  return vals;
-}
-
-/** Build all advanced parameter combinations */
-function buildAdvancedCombos() {
-  const freqs = buildSweepRange('adv-sweep-freq', 'adv-freq-min', 'adv-freq-max', 'adv-freq-step', 'adv-freq-val');
-  const fcs = buildSweepRange('adv-sweep-fc', 'adv-fc-min', 'adv-fc-max', 'adv-fc-step', 'adv-fc-val');
-  const hms = buildSweepRange('adv-sweep-hm', 'adv-hm-min', 'adv-hm-max', 'adv-hm-step', 'adv-hm-val');
-  const shs = buildSweepRange('adv-sweep-sh', 'adv-sh-min', 'adv-sh-max', 'adv-sh-step', 'adv-sh-val');
-  const combos = [];
-  for (const freq of freqs)
-    for (const fc of fcs)
-      for (const hm of hms)
-        for (const sh of shs)
-          combos.push({ freq_mhz: freq, fc, hm, sh });
-  return combos;
-}
-
-function updateAdvComboCount() {
-  const combos = buildAdvancedCombos();
-  const el = document.getElementById('adv-combo-info');
-  el.textContent = `Combos: ${combos.length}`;
-  el.className = combos.length > 50 ? 'adv-combo-info warning' : 'adv-combo-info';
-}
-
-function wireTargetSubMode() {
-  const quickBtn = document.getElementById('target-quick');
-  const advBtn = document.getElementById('target-advanced');
-  const quickPanel = document.getElementById('target-quick-panel');
-  const advPanel = document.getElementById('target-advanced-panel');
-
-  function setSubMode(mode) {
-    targetSubMode = mode;
-    quickBtn.classList.toggle('active', mode === 'quick');
-    advBtn.classList.toggle('active', mode === 'advanced');
-    quickPanel.style.display = mode === 'quick' ? 'block' : 'none';
-    advPanel.style.display = mode === 'advanced' ? 'block' : 'none';
+  if (viewMode === '3d') {
+    updateGlobeRays(traceGroups, getTxLat(), getTxLon(), getRxLat(), getRxLon());
   }
-
-  quickBtn.addEventListener('click', () => setSubMode('quick'));
-  advBtn.addEventListener('click', () => setSubMode('advanced'));
-
-  // Wire advanced sweep checkboxes to show/hide range vs fixed inputs
-  const sweepChecks = [
-    { cb: 'adv-sweep-freq', range: 'adv-freq-range', fixed: 'adv-freq-fixed' },
-    { cb: 'adv-sweep-fc', range: 'adv-fc-range', fixed: 'adv-fc-fixed' },
-    { cb: 'adv-sweep-hm', range: 'adv-hm-range', fixed: 'adv-hm-fixed' },
-    { cb: 'adv-sweep-sh', range: 'adv-sh-range', fixed: 'adv-sh-fixed' },
-  ];
-  for (const { cb, range, fixed } of sweepChecks) {
-    const checkbox = document.getElementById(cb);
-    const rangeEl = document.getElementById(range);
-    const fixedEl = document.getElementById(fixed);
-    checkbox.addEventListener('change', () => {
-      rangeEl.classList.toggle('adv-hidden', !checkbox.checked);
-      fixedEl.classList.toggle('adv-hidden', checkbox.checked);
-      updateAdvComboCount();
-    });
-  }
-
-  // Update combo count on any advanced input change
-  document.querySelectorAll('#target-advanced-panel input[type="number"]').forEach(inp => {
-    inp.addEventListener('input', updateAdvComboCount);
-  });
+  updateLegend();
+  serializeStateToUrl();
 }
 
-async function targetAdvancedSearch() {
-  if (isTargeting) return;
-  isTargeting = true;
 
-  const btn = document.getElementById('target-btn');
-  btn.classList.add('loading');
-  btn.querySelector('.btn-icon').textContent = '⟳';
 
-  const targetRange = parseFloat(document.getElementById('target-range').value);
-  const tolerance = parseFloat(document.getElementById('target-tolerance').value);
-  const elevLo = parseFloat(document.getElementById('adv-elev-min').value);
-  const elevHi = parseFloat(document.getElementById('adv-elev-max').value);
-  const maxIter = parseInt(document.getElementById('adv-max-iter').value);
 
-  const logBody = document.getElementById('target-log-body');
-  logBody.innerHTML = `<div class="target-log-row header"><span>#</span><span>Config</span><span>Range</span><span>Error</span></div>`;
 
-  targetMarkerRange = targetRange;
-  traceGroups = [];
-
-  const combos = buildAdvancedCombos();
-  const results = [];
-  let comboIdx = 0;
-
-  const baseConfig = {
-    ray_mode: parseFloat(getCheckedValues('ray-mode-group', true)[0] || -1),
-    azimuth_deg: getAzimuth(),
-    tx_lat_deg: getTxLat(),
-    fh: parseFloat(document.getElementById('fh').value),
-    step_size: 5.0,
-    max_steps: 500,
-    ed_model: parseInt(getCheckedValues('ed-model-group')[0] || 0),
-    mag_model: parseInt(getCheckedValues('mag-model-group')[0] || 0),
-    rindex_model: parseInt(getCheckedValues('rindex-model-group')[0] || 0),
-    pert_model: parseInt(getCheckedValues('pert-model-group')[0] || 0),
-  };
-
-  btn.querySelector('.btn-label').textContent = `0/${combos.length}`;
-
-  for (const combo of combos) {
-    comboIdx++;
-    btn.querySelector('.btn-label').textContent = `${comboIdx}/${combos.length}`;
-
-    const comboLabel = [
-      `f=${combo.freq_mhz}`,
-      `fc=${combo.fc}`,
-      `hm=${combo.hm}`,
-      `sh=${combo.sh}`,
-    ].join(' ');
-
-    // Bisect elevation for this combo
-    let lo = elevLo, hi = elevHi;
-    let bestRay = null, bestElev = null, bestError = Infinity;
-    let found = false;
-
-    for (let iter = 0; iter < maxIter; iter++) {
-      if (stopTargeting) break;
-      const mid = (lo + hi) / 2;
-      const body = {
-        ...baseConfig,
-        freq_mhz: combo.freq_mhz,
-        fc: combo.fc,
-        hm: combo.hm,
-        sh: combo.sh,
-        elev_min: mid,
-        elev_max: mid,
-        elev_step: 1.0,
-      };
-
-      let data;
-      try {
-        const resultJson = trace_fan_wasm(JSON.stringify(body));
-        data = JSON.parse(resultJson);
-      } catch (err) { break; }
-
-      if (!data.rays || data.rays.length === 0) break;
-      const ray = data.rays[0];
-      const isGround = ray.ground;
-      const range = isGround ? ray.range_km : null;
-      const error = isGround ? Math.abs(range - targetRange) : null;
-
-      if (isGround && error < bestError) {
-        bestError = error;
-        bestRay = ray;
-        bestElev = mid;
-      }
-
-      // Live drawing of the bisection
-      traceGroups.push({
-        label: `${comboLabel} @ ${mid.toFixed(1)}°`,
-        color: isGround ? '#475569' : '#334155',
-        rays: [ray],
-        config: body,
-      });
-      render();
-      if (viewMode === '3d') updateGlobeRays(traceGroups, getTxLat(), getTxLon(), getRxLat(), getRxLon());
-      updateLegend();
-      await new Promise(r => setTimeout(r, 10)); // yield to UI
-
-      if (isGround && error <= tolerance) { found = true; break; }
-
-      // Elevation bisection: higher elev = shorter range
-      if (!isGround) { hi = mid; }
-      else if (range < targetRange) { hi = mid; }
-      else { lo = mid; }
-    }
-
-    results.push({
-      combo, comboLabel, bestElev,
-      bestRange: bestRay ? bestRay.range_km : null,
-      bestError: bestRay ? bestError : Infinity,
-      ray: bestRay, found,
-    });
-
-    // Add best ray to trace groups
-    if (bestRay) {
-      const color = found ? '#10b981' : (bestError < tolerance * 3 ? '#6366f1' : '#64748b');
-      traceGroups.push({
-        label: found ? `✅ ${comboLabel}` : comboLabel,
-        color, rays: [bestRay], config: combo,
-      });
-    }
-
-    // Log entry
-    const rowClass = found ? 'success' : (bestRay ? 'fail' : 'escape');
-    const rangeStr = bestRay ? `${bestRay.range_km} km` : 'no return';
-    const errorStr = bestRay ? `${bestError.toFixed(1)} km` : '—';
-    logBody.innerHTML += `<div class="target-log-row ${rowClass}"><span>${comboIdx}</span><span>${comboLabel}</span><span>${rangeStr}</span><span>${errorStr}</span></div>`;
-    logBody.scrollTop = logBody.scrollHeight;
-
-    render();
-    if (viewMode === '3d') updateGlobeRays(traceGroups, getTxLat(), getTxLon(), getRxLat(), getRxLon());
-    updateLegend();
-    await new Promise(r => setTimeout(r, 10));
-  }
-
-  // ---- Ranked results table ----
-  results.sort((a, b) => a.bestError - b.bestError);
-
-  const resultsEl = document.getElementById('adv-results');
-  const resultsBody = document.getElementById('adv-results-body');
-  resultsEl.style.display = 'block';
-
-  let html = `<div class="adv-result-row header"><span>#</span><span>Config</span><span>Range</span><span>Error</span></div>`;
-  let rank = 0;
-  for (const r of results) {
-    rank++;
-    const cls = r.found ? 'best' : (r.bestError <= tolerance * 2 ? 'good' : 'miss');
-    const rangeStr = r.bestRange !== null ? `${r.bestRange} km` : '—';
-    const errorStr = r.bestError < Infinity ? `${r.bestError.toFixed(1)} km` : '—';
-    const elevStr = r.bestElev !== null ? ` @${r.bestElev.toFixed(1)}°` : '';
-    html += `<div class="adv-result-row ${cls}"><span>${rank}</span><span>${r.comboLabel}${elevStr}</span><span>${rangeStr}</span><span>${errorStr}</span></div>`;
-  }
-  resultsBody.innerHTML = html;
-
-  // Summary
-  const nFound = results.filter(r => r.found).length;
-  const nClose = results.filter(r => !r.found && r.bestError <= tolerance * 2).length;
-  const ranges = results.filter(r => r.bestRange !== null).map(r => r.bestRange);
-  if (ranges.length > 0) {
-    const summary = document.getElementById('target-range-summary');
-    summary.style.display = 'block';
-    document.getElementById('fan-range-min').textContent = `${Math.min(...ranges).toFixed(0)} km`;
-    document.getElementById('fan-range-max').textContent = `${Math.max(...ranges).toFixed(0)} km`;
-    document.getElementById('fan-returned-count').textContent = `${ranges.length}/${results.length}`;
-    document.getElementById('fan-escaped-count').textContent = `${results.length - ranges.length}/${results.length}`;
-    const hintEl = document.getElementById('fan-range-hint');
-    hintEl.textContent = `${nFound} exact match${nFound !== 1 ? 'es' : ''}, ${nClose} close result${nClose !== 1 ? 's' : ''} out of ${results.length} combos`;
-    hintEl.className = nFound > 0 ? 'range-hint good' : 'range-hint';
-  }
-
-  document.getElementById('stat-rays').textContent = `${traceGroups.reduce((s, g) => s + g.rays.length, 0)} rays`;
-  document.getElementById('stat-time').textContent = nFound > 0 ? `✅ ${nFound} found` : '⚠ none exact';
-
-  btn.classList.remove('loading');
-  btn.querySelector('.btn-icon').textContent = '🎯';
-  btn.querySelector('.btn-label').textContent = 'Find Path';
-  isTargeting = false;
-}
 
 // ============================================================
 // Controls wiring
 // ============================================================
+
+
+
 
 function wireControls() {
   // Slider → output wiring
@@ -2266,13 +1708,9 @@ function wireControls() {
   // Trace button
   document.getElementById('trace-btn').addEventListener('click', traceRays);
 
-  // Target button — dispatches to quick or advanced
+  // Target button — always runs unified bisection
   document.getElementById('target-btn').addEventListener('click', () => {
-    if (targetSubMode === 'advanced') {
-      targetAdvancedSearch();
-    } else {
-      targetBisection();
-    }
+    targetBisection();
   });
 
   // Stop button — cancels bisection
@@ -2373,8 +1811,7 @@ function wireControls() {
   wireResizeHandle();
   wireFullscreenToggle();
   wireModeSwitching();
-  wireSearchVarSelector();
-  wireTargetSubMode();
+
   wireInfoModal();
 
   // Accordion section toggles

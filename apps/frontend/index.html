@@ -459,127 +459,53 @@
                             class="target-input">
                     </div>
                 </label>
-                <div class="target-mode-toggle">
-                    <button id="target-quick" class="target-mode-btn active">⚡ Quick</button>
-                    <button id="target-advanced" class="target-mode-btn">🔬 Advanced</button>
-                </div>
-                <!-- Quick: single variable bisection -->
-                <div id="target-quick-panel">
-                    <label>
-                        <span>Search Variable</span>
-                        <div class="slider-row">
-                            <select id="target-search-var" class="target-input">
-                                <option value="elev" selected>Elevation (°)</option>
-                                <option value="freq">Frequency (MHz)</option>
-                                <option value="fc">foF2 (MHz)</option>
-                                <option value="hm">hmF2 (km)</option>
-                                <option value="sh">Scale Height (km)</option>
-                            </select>
-                        </div>
-                    </label>
-                    <label>
-                        <span id="target-range-label">Search Range</span>
-                        <div class="sweep-inputs">
-                            <div class="sweep-field"><span>Min</span>
-                                <input type="number" id="target-search-min" min="1" max="85" step="0.5" value="1">
-                            </div>
-                            <div class="sweep-field"><span>Max</span>
-                                <input type="number" id="target-search-max" min="5" max="89" step="0.5" value="60">
-                            </div>
-                        </div>
-                    </label>
-                    <label>
-                        <span>Max Iterations</span>
-                        <div class="slider-row">
-                            <input type="number" id="target-max-iter" min="5" max="50" step="1" value="20"
-                                class="target-input">
-                        </div>
-                    </label>
-                </div>
-                <!-- Advanced: sweep multiple params, bisect elevation for each -->
-                <div id="target-advanced-panel" style="display:none;">
-                    <div class="adv-info-note">Bisects <b>elevation</b> for each parameter combo below.</div>
-                    <div class="adv-sweep-param">
-                        <span class="adv-sweep-name">Elevation bisect range (°)</span>
-                        <div class="sweep-inputs">
-                            <div class="sweep-field"><span>Min</span><input type="number" id="adv-elev-min" value="1"
-                                    min="1" max="85" step="0.5"></div>
-                            <div class="sweep-field"><span>Max</span><input type="number" id="adv-elev-max" value="60"
-                                    min="5" max="89" step="0.5"></div>
-                        </div>
+                <!-- Search Parameters (unified) -->
+                <div id="target-params-panel">
+                    <div class="target-param-row">
+                        <span class="target-param-label">Elevation (°)</span>
+                        <input type="number" id="target-search-min" min="1" max="85" step="0.5" value="1"
+                            class="target-param-val">
+                        <span class="target-param-sep">–</span>
+                        <input type="number" id="target-search-max" min="5" max="89" step="0.5" value="60"
+                            class="target-param-val">
                     </div>
-                    <div class="adv-sweep-param">
-                        <label class="adv-sweep-header"><input type="checkbox" id="adv-sweep-freq"><span
-                                class="adv-sweep-name">Frequency (MHz)</span></label>
-                        <div class="sweep-inputs adv-fixed-row" id="adv-freq-fixed">
-                            <div class="sweep-field"><span>Value</span><input type="number" id="adv-freq-val" value="10"
-                                    min="2" max="30" step="0.5"></div>
-                        </div>
-                        <div class="sweep-inputs adv-hidden" id="adv-freq-range">
-                            <div class="sweep-field"><span>Min</span><input type="number" id="adv-freq-min" value="8"
-                                    min="2" max="30" step="0.5"></div>
-                            <div class="sweep-field"><span>Max</span><input type="number" id="adv-freq-max" value="15"
-                                    min="2" max="30" step="0.5"></div>
-                            <div class="sweep-field"><span>Step</span><input type="number" id="adv-freq-step" value="2"
-                                    min="0.5" max="10" step="0.5"></div>
-                        </div>
+                    <div class="target-param-row">
+                        <span class="target-param-label">Frequency (MHz)</span>
+                        <input type="number" id="target-freq-min" min="2" max="30" step="0.5" value="10"
+                            class="target-param-val">
+                        <span class="target-param-sep">–</span>
+                        <input type="number" id="target-freq-max" min="2" max="30" step="0.5" value="10"
+                            class="target-param-val">
                     </div>
-                    <div class="adv-sweep-param">
-                        <label class="adv-sweep-header"><input type="checkbox" id="adv-sweep-fc"><span
-                                class="adv-sweep-name">foF2 (MHz)</span></label>
-                        <div class="sweep-inputs adv-fixed-row" id="adv-fc-fixed">
-                            <div class="sweep-field"><span>Value</span><input type="number" id="adv-fc-val" value="10"
-                                    min="2" max="20" step="0.5"></div>
-                        </div>
-                        <div class="sweep-inputs adv-hidden" id="adv-fc-range">
-                            <div class="sweep-field"><span>Min</span><input type="number" id="adv-fc-min" value="6"
-                                    min="2" max="20" step="0.5"></div>
-                            <div class="sweep-field"><span>Max</span><input type="number" id="adv-fc-max" value="14"
-                                    min="2" max="20" step="0.5"></div>
-                            <div class="sweep-field"><span>Step</span><input type="number" id="adv-fc-step" value="2"
-                                    min="0.5" max="10" step="0.5"></div>
-                        </div>
+                    <div class="target-param-row">
+                        <span class="target-param-label">foF2 (MHz)</span>
+                        <input type="number" id="target-fc-min" min="2" max="20" step="0.5" value="10"
+                            class="target-param-val">
+                        <span class="target-param-sep">–</span>
+                        <input type="number" id="target-fc-max" min="2" max="20" step="0.5" value="10"
+                            class="target-param-val">
                     </div>
-                    <div class="adv-sweep-param">
-                        <label class="adv-sweep-header"><input type="checkbox" id="adv-sweep-hm"><span
-                                class="adv-sweep-name">hmF2 (km)</span></label>
-                        <div class="sweep-inputs adv-fixed-row" id="adv-hm-fixed">
-                            <div class="sweep-field"><span>Value</span><input type="number" id="adv-hm-val" value="300"
-                                    min="150" max="400" step="10"></div>
-                        </div>
-                        <div class="sweep-inputs adv-hidden" id="adv-hm-range">
-                            <div class="sweep-field"><span>Min</span><input type="number" id="adv-hm-min" value="200"
-                                    min="150" max="400" step="10"></div>
-                            <div class="sweep-field"><span>Max</span><input type="number" id="adv-hm-max" value="350"
-                                    min="150" max="400" step="10"></div>
-                            <div class="sweep-field"><span>Step</span><input type="number" id="adv-hm-step" value="50"
-                                    min="10" max="100" step="10"></div>
-                        </div>
+                    <div class="target-param-row">
+                        <span class="target-param-label">hmF2 (km)</span>
+                        <input type="number" id="target-hm-min" min="150" max="400" step="10" value="250"
+                            class="target-param-val">
+                        <span class="target-param-sep">–</span>
+                        <input type="number" id="target-hm-max" min="150" max="400" step="10" value="250"
+                            class="target-param-val">
                     </div>
-                    <div class="adv-sweep-param">
-                        <label class="adv-sweep-header"><input type="checkbox" id="adv-sweep-sh"><span
-                                class="adv-sweep-name">Scale Height (km)</span></label>
-                        <div class="sweep-inputs adv-fixed-row" id="adv-sh-fixed">
-                            <div class="sweep-field"><span>Value</span><input type="number" id="adv-sh-val" value="80"
-                                    min="30" max="200" step="5"></div>
-                        </div>
-                        <div class="sweep-inputs adv-hidden" id="adv-sh-range">
-                            <div class="sweep-field"><span>Min</span><input type="number" id="adv-sh-min" value="60"
-                                    min="30" max="200" step="5"></div>
-                            <div class="sweep-field"><span>Max</span><input type="number" id="adv-sh-max" value="150"
-                                    min="30" max="200" step="5"></div>
-                            <div class="sweep-field"><span>Step</span><input type="number" id="adv-sh-step" value="30"
-                                    min="5" max="50" step="5"></div>
-                        </div>
+                    <div class="target-param-row">
+                        <span class="target-param-label">Scale Height (km)</span>
+                        <input type="number" id="target-sh-min" min="30" max="200" step="5" value="100"
+                            class="target-param-val">
+                        <span class="target-param-sep">–</span>
+                        <input type="number" id="target-sh-max" min="30" max="200" step="5" value="100"
+                            class="target-param-val">
                     </div>
-                    <label>
-                        <span>Max Iterations / combo</span>
-                        <div class="slider-row">
-                            <input type="number" id="adv-max-iter" min="5" max="50" step="1" value="15"
-                                class="target-input">
-                        </div>
-                    </label>
-                    <div id="adv-combo-info" class="adv-combo-info">Combos: 1</div>
+                    <div class="target-param-row">
+                        <span class="target-param-label">Max Iterations</span>
+                        <input type="number" id="target-max-iter" min="5" max="50" step="1" value="20"
+                            class="target-param-val" style="flex:1;">
+                    </div>
                 </div>
                 <!-- Shared -->
                 <div id="target-range-summary" class="target-range-summary" style="display:none;">

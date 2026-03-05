@@ -2,6 +2,13 @@
 /* eslint-disable */
 
 /**
+ * Solve for launch parameters to hit a target location (called from JavaScript).
+ *
+ * Accepts a JSON string request, returns a JSON string response.
+ */
+export function solve_target_wasm(request_json: string): string;
+
+/**
  * Trace a fan of rays through the ionosphere (called from JavaScript).
  *
  * Accepts a JSON string request, returns a JSON string response.
@@ -12,6 +19,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
+    readonly solve_target_wasm: (a: number, b: number) => [number, number];
     readonly trace_fan_wasm: (a: number, b: number) => [number, number];
     readonly __wbindgen_externrefs: WebAssembly.Table;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
