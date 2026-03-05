@@ -116,6 +116,39 @@ export function lookAtLocation(lat, lon) {
     controls.update();
 }
 
+/** Zoom 3D camera to fit two lat/lon points with 120% padding. */
+export function zoomToFit(lat1, lon1, lat2, lon2) {
+    if (!camera || !controls) return;
+
+    // Midpoint on sphere
+    const midLat = (lat1 + lat2) / 2;
+    const midLon = (lon1 + lon2) / 2;
+
+    // Angular distance between points (degrees)
+    const toRad = Math.PI / 180;
+    const dLat = (lat2 - lat1) * toRad;
+    const dLon = (lon2 - lon1) * toRad;
+    const a = Math.sin(dLat / 2) ** 2 +
+        Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.sin(dLon / 2) ** 2;
+    const angularDist = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)); // radians
+
+    // Camera distance: factor of 1.2 for 120% coverage
+    // FOV-based calculation: distance = radius / tan(fov/2), adjusted for angular span
+    const halfFov = THREE.MathUtils.degToRad(camera.fov / 2);
+    const span = Math.max(angularDist, 0.05); // minimum span to avoid too-close zoom
+    const dist = Math.max(1.3, (1.2 * span) / halfFov + 1.0);
+
+    const latR = THREE.MathUtils.degToRad(midLat);
+    const lonR = THREE.MathUtils.degToRad(midLon);
+    camera.position.set(
+        dist * Math.cos(latR) * Math.sin(lonR),
+        dist * Math.sin(latR),
+        dist * Math.cos(latR) * Math.cos(lonR)
+    );
+    controls.target.set(0, 0, 0);
+    controls.update();
+}
+
 export function updateGlobeRays(traceGroups, txLatDeg, txLonDeg, rxLatDeg, rxLonDeg) {
     if (!scene) return;
 

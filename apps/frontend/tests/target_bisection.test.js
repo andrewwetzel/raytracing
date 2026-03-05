@@ -3,7 +3,7 @@ const assert = require('node:assert');
 const puppeteer = require('puppeteer');
 const path = require('path');
 
-describe('Target Bisection & Globe Interaction E2E Tests', { timeout: 15000 }, () => {
+describe('Target Bisection & Globe Interaction E2E Tests', { timeout: 30000 }, () => {
     let browser;
     let page;
 

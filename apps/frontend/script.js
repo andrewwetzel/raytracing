@@ -8,7 +8,7 @@
  */
 
 import init, { trace_fan_wasm, solve_target_wasm } from './pkg/ionotrace.js';
-import { initGlobe, updateGlobeRays, setGlobeVisible, onGlobeClick, lookAtLocation } from './globe3d.js';
+import { initGlobe, updateGlobeRays, setGlobeVisible, onGlobeClick, lookAtLocation, zoomToFit } from './globe3d.js';
 
 // ============================================================
 // State
@@ -47,7 +47,7 @@ let zoomRect = null; // { x1, y1, x2, y2 } in canvas coords
 let showIonoLayers = true;
 
 // 3D globe view
-let viewMode = '2d'; // '2d' or '3d'
+let viewMode = '3d'; // '2d' or '3d'
 let globeInitialized = false;
 
 // Distinct colors for up to 16 comparison groups
@@ -2077,6 +2077,58 @@ function wireControls() {
     }
   });
 
+  // Snap-to-fit button
+  document.getElementById('snap-fit-btn')?.addEventListener('click', () => {
+    const txLat = getTxLat();
+    const txLon = getTxLon();
+    const rxLat = getRxLat();
+    const rxLon = getRxLon();
+
+    // Determine the second point: RX if set, otherwise target range endpoint
+    let endLat = txLat, endLon = txLon;
+    if (rxLat !== null && rxLon !== null) {
+      endLat = rxLat;
+      endLon = rxLon;
+    } else if (targetMarkerRange != null) {
+      const az = getAzimuth();
+      const R = 6371;
+      const toRadS = Math.PI / 180;
+      const d = targetMarkerRange / R;
+      const p1 = txLat * toRadS;
+      const t1 = az * toRadS;
+      endLat = Math.asin(Math.sin(p1) * Math.cos(d) + Math.cos(p1) * Math.sin(d) * Math.cos(t1)) / toRadS;
+      endLon = txLon + Math.atan2(Math.sin(t1) * Math.sin(d) * Math.cos(p1), Math.cos(d) - Math.sin(p1) * Math.sin(endLat * toRadS)) / toRadS;
+    }
+
+    if (viewMode === '3d') {
+      zoomToFit(txLat, txLon, endLat, endLon);
+    } else {
+      // 2D snap-to-fit: compute zoom and pan to frame the TX→target arc
+      const { distance_km } = computeBearingDistance(txLat, txLon, endLat, endLon);
+      const rangeKm = Math.max(distance_km, 200);
+      // In 2D, TX is at angle=0 and target is at angle = range/circumference * 2π
+      const totalCircum = VIS.earthR * Math.PI * 2;
+      const theta = (rangeKm / totalCircum) * Math.PI * 2;
+      // Calculate zoom to frame this arc with 20% padding
+      const { cx, cy, scale } = getEarthTransform();
+      const r = VIS.earthR + VIS.maxAlt;
+      const txPos = { x: cx, y: cy - r * scale };
+      const tgtPos = { x: cx + r * Math.sin(theta) * scale, y: cy - r * Math.cos(theta) * scale };
+      const spanX = Math.abs(tgtPos.x - txPos.x) * 1.2;
+      const spanY = Math.abs(tgtPos.y - txPos.y) * 1.2;
+      const midX = (txPos.x + tgtPos.x) / 2;
+      const midY = (txPos.y + tgtPos.y) / 2;
+      const canvasEl = document.getElementById('canvas');
+      const ww = canvasEl.width;
+      const hh = canvasEl.height;
+      const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.min(ww / spanX, hh / spanY) * 0.8));
+      camera.zoom = newZoom;
+      camera.panX = ww / 2 - midX * newZoom;
+      camera.panY = hh / 2 - midY * newZoom;
+      render();
+    }
+  });
+
   // Zoom-rect mousedown
   canvas.addEventListener('mousedown', (e) => {
     if (!zoomRectMode) return;
@@ -2354,6 +2406,33 @@ async function main() {
 
   // Restore state from URL before first trace
   restoreStateFromUrl();
+
+  // Auto-start in 3D mode
+  const globeEl = document.getElementById('globe-container');
+  const canvasEl = document.getElementById('canvas');
+  if (!globeInitialized) {
+    initGlobe(globeEl);
+    onGlobeClick((lat, lon) => {
+      if (!globePickMode) return;
+      if (globePickMode === 'rx') {
+        setRxLocation(lat, lon);
+      } else if (globePickMode === 'tx') {
+        setTxLocation(lat, lon, `${lat.toFixed(1)}°, ${lon.toFixed(1)}°`, 'located');
+      }
+      resetGlobePick();
+    });
+    globeInitialized = true;
+  }
+  canvasEl.style.display = 'none';
+  setGlobeVisible(true);
+  const hint3d = document.getElementById('globe-hint');
+  if (hint3d) {
+    hint3d.style.display = 'block';
+    hint3d.textContent = 'Click anywhere on globe to set TX (Start) location';
+    hint3d.className = 'globe-hint tx-mode';
+  }
+  document.getElementById('view-3d-btn').textContent = '2D';
+  document.getElementById('view-3d-btn').style.opacity = '1';
 
   render();
   // Auto-trace on load
