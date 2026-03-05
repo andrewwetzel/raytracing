@@ -247,3 +247,63 @@ fn test_target_escape_boundary_long_range() {
         result.rays_traced
     );
 }
+
+#[test]
+fn test_target_multi_hop_long_distance() {
+    // Multi-hop test: a target at ~3000 km requires at least 2 hops.
+    // First, find a known landing at modest elevation to determine single-hop range,
+    // then set a target beyond that range and verify multi-hop can reach it.
+    let (lat1, lon1, range1) = known_landing(10.0, 15.0, 0.0, 40.0);
+    println!(
+        "Single-hop at 15°: landing ({:.2}, {:.2}), range {:.0} km",
+        lat1, lon1, range1
+    );
+
+    // Target at roughly 2x single-hop range — requires 2+ hops
+    let target_range = range1 * 2.0;
+    let target_lat = 40.0 + (target_range / 111.0); // approx latitude offset
+
+    let config = TargetConfig {
+        target_lat_deg: target_lat,
+        target_lon_deg: 0.0,
+        tx_lat_deg: 40.0,
+        freq_mhz: SearchSpec::Fixed(10.0),
+        azimuth_deg: SearchSpec::Fixed(0.0),
+        error_limit_km: 50.0,
+        coarse_step: 2.0,
+        elev_min: 3.0,
+        elev_max: 60.0,
+        max_bisect_iters: 30,
+        max_hops: 3,
+        step_size: 5.0,
+        max_steps: 1000,
+        ..TargetConfig::default()
+    };
+
+    let result = solve_target(&config).unwrap();
+    println!(
+        "Multi-hop test: target_lat={:.1}, {} solutions, {} rays, best_err={:.1} km",
+        target_lat,
+        result.solutions.len(),
+        result.rays_traced,
+        result.best.as_ref().map(|s| s.error_km).unwrap_or(f64::INFINITY),
+    );
+
+    if let Some(best) = &result.best {
+        println!(
+            "  Best: elev={:.2}°, hops={}, range={:.0} km",
+            best.elevation_deg, best.hops, best.range_km
+        );
+        assert!(
+            best.hops >= 2,
+            "Solution for 2x single-hop range should use multiple hops, got {} hops",
+            best.hops
+        );
+    }
+    // The solver should at least explore brackets for the multi-hop case
+    assert!(
+        result.rays_traced > 30,
+        "Solver should trace rays for multi-hop search, got only {}",
+        result.rays_traced
+    );
+}

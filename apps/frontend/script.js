@@ -1600,20 +1600,62 @@ async function targetBisection() {
   }
 
   // ========== PHASE 2: Identify brackets ==========
-  const brackets = [];
+  const rawBrackets = [];
   for (let i = 0; i < sweepResults.length - 1; i++) {
     const a = sweepResults[i], b = sweepResults[i + 1];
     // Classic sign-change bracket: both returned, opposite sign errors
     if (a.signedErr != null && b.signedErr != null && a.signedErr * b.signedErr < 0) {
-      brackets.push({ lo: a.elev, hi: b.elev, errLo: a.signedErr, errHi: b.signedErr });
+      rawBrackets.push({ lo: a.elev, hi: b.elev, errLo: a.signedErr, errHi: b.signedErr });
     }
     // Escape-boundary bracket: returned ray undershot, adjacent ray escaped
-    // The target might be reachable just below the escape angle
     else if (a.signedErr != null && a.signedErr < 0 && b.signedErr == null) {
-      brackets.push({ lo: a.elev, hi: b.elev, errLo: a.signedErr, errHi: 1e6 });
+      rawBrackets.push({ lo: a.elev, hi: b.elev, errLo: a.signedErr, errHi: 1e6 });
     }
     else if (a.signedErr == null && b.signedErr != null && b.signedErr < 0) {
-      brackets.push({ lo: a.elev, hi: b.elev, errLo: 1e6, errHi: b.signedErr });
+      rawBrackets.push({ lo: a.elev, hi: b.elev, errLo: 1e6, errHi: b.signedErr });
+    }
+  }
+
+  // ========== PHASE 2.5: Adaptive sub-sweep for escape brackets ==========
+  // With thin ionosphere (low scale height), the return window is narrower than
+  // the coarse step. Sub-sweep escape brackets at finer resolution.
+  const brackets = [];
+  const subStep = Math.max(coarseStep / 8, 0.25);
+  for (const brk of rawBrackets) {
+    const isEscapeBracket = Math.abs(brk.errLo) > 1e5 || Math.abs(brk.errHi) > 1e5;
+    if (!isEscapeBracket) {
+      brackets.push(brk);
+      continue;
+    }
+
+    btn.querySelector('.btn-label').textContent = 'Sub-sweep ' + brk.lo.toFixed(1) + '°...';
+
+    const subResults = [];
+    for (let se = brk.lo; se <= brk.hi + 0.001; se += subStep) {
+      if (stopTargeting) break;
+      const ray = traceSingleRay(se);
+      const sErr = signedError(ray);
+      subResults.push({ elev: se, ray, signedErr: sErr });
+
+      if (ray && ray.pts && ray.pts.length >= 2) {
+        addRayGroup(ray, se, '#475569', 0.15, 'sub ' + se.toFixed(2) + ' deg');
+        logRay(ray, se);
+      }
+      await refreshDisplay();
+    }
+
+    // Extract refined brackets from sub-sweep
+    for (let j = 0; j < subResults.length - 1; j++) {
+      const a = subResults[j], b = subResults[j + 1];
+      if (a.signedErr != null && b.signedErr != null && a.signedErr * b.signedErr < 0) {
+        brackets.push({ lo: a.elev, hi: b.elev, errLo: a.signedErr, errHi: b.signedErr });
+      }
+      else if (a.signedErr != null && a.signedErr < 0 && b.signedErr == null) {
+        brackets.push({ lo: a.elev, hi: b.elev, errLo: a.signedErr, errHi: 1e6 });
+      }
+      else if (a.signedErr == null && b.signedErr != null && b.signedErr < 0) {
+        brackets.push({ lo: a.elev, hi: b.elev, errLo: 1e6, errHi: b.signedErr });
+      }
     }
   }
 
@@ -1652,10 +1694,19 @@ async function targetBisection() {
 
       if (err <= tolerance) break;
 
-      if (sErr != null && sErr * errLo < 0) {
-        hi = mid;
-      } else if (sErr == null) {
+      if (sErr == null) {
         // Ray escaped — shrink from the escape side
+        if (Math.abs(errLo) > 1e5) {
+          // errLo is also escape-synthetic: both sides escaped, shrink lo
+          lo = mid;
+        } else {
+          hi = mid;
+        }
+      } else if (Math.abs(errLo) > 1e5) {
+        // errLo is synthetic (escape side), this ray returned — update lo
+        lo = mid;
+        errLo = sErr;
+      } else if (sErr * errLo < 0) {
         hi = mid;
       } else {
         lo = mid;
@@ -1668,6 +1719,7 @@ async function targetBisection() {
       await refreshDisplay();
     }
   }
+
 
   // ========== PHASE 4: Final result ==========
   fadeOldRays();

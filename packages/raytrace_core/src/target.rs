@@ -125,7 +125,7 @@ impl Default for TargetConfig {
             error_limit_km: 5.0,
             max_bisect_iters: 30,
             max_nm_iters: 100,
-            max_hops: 1,
+            max_hops: 3,
             step_size: 5.0,
             max_steps: 500,
             include_ray_path: false,
@@ -394,22 +394,20 @@ fn coarse_sweep(
                 });
             }
             // Escape-boundary bracket: ray undershot then next escaped.
-            // The target might be reachable just below the escape angle.
             (Some(ea), None) if *ea < 0.0 => {
                 brackets.push(Bracket {
                     elev_lo,
                     elev_hi,
                     err_lo: *ea,
-                    err_hi: 1e6, // synthetic overshoot for escaped ray
+                    err_hi: 1e6,
                 });
             }
             // Escape-boundary bracket: ray escaped then next returned with undershoot.
-            // (less common but possible with multi-hop or irregular profiles)
             (None, Some(eb)) if *eb < 0.0 => {
                 brackets.push(Bracket {
                     elev_lo,
                     elev_hi,
-                    err_lo: 1e6, // synthetic overshoot for escaped ray
+                    err_lo: 1e6,
                     err_hi: *eb,
                 });
             }
@@ -417,7 +415,79 @@ fn coarse_sweep(
         }
     }
 
-    brackets
+    // Adaptive sub-sweep: refine escape-boundary brackets with finer resolution.
+    // With thin ionosphere (low scale height), the return window can be narrower
+    // than the coarse step. Sub-sweep at 1/4 step to find precise transitions.
+    let sub_step = (config.coarse_step / 8.0).max(0.25);
+    let mut refined = Vec::new();
+    for bracket in &brackets {
+        let is_escape_bracket =
+            bracket.err_lo.abs() > 1e5 || bracket.err_hi.abs() > 1e5;
+        if !is_escape_bracket {
+            refined.push(bracket.clone());
+            continue;
+        }
+
+        // Sub-sweep within the escape bracket
+        let mut sub_outcomes: Vec<(f64, Option<f64>)> = Vec::new();
+        let mut se = bracket.elev_lo;
+        while se <= bracket.elev_hi + 0.001 {
+            let outcome =
+                fire_ray(freq, config.ray_mode, se, az, config.tx_lat_deg, config, false);
+            let signed_err = outcome.and_then(|o| {
+                if o.returned {
+                    Some(signed_range_error(
+                        o.landing_lat,
+                        o.landing_lon,
+                        config.target_lat_deg,
+                        config.target_lon_deg,
+                        config.tx_lat_deg,
+                    ))
+                } else {
+                    None
+                }
+            });
+            sub_outcomes.push((se, signed_err));
+            se += sub_step;
+        }
+        *rays_traced += sub_outcomes.len();
+
+        // Extract sub-brackets from finer sweep
+        for j in 0..sub_outcomes.len().saturating_sub(1) {
+            let (se_lo, ref se_a) = sub_outcomes[j];
+            let (se_hi, ref se_b) = sub_outcomes[j + 1];
+            match (se_a, se_b) {
+                (Some(ea), Some(eb)) if ea * eb < 0.0 => {
+                    refined.push(Bracket {
+                        elev_lo: se_lo,
+                        elev_hi: se_hi,
+                        err_lo: *ea,
+                        err_hi: *eb,
+                    });
+                }
+                (Some(ea), None) if *ea < 0.0 => {
+                    refined.push(Bracket {
+                        elev_lo: se_lo,
+                        elev_hi: se_hi,
+                        err_lo: *ea,
+                        err_hi: 1e6,
+                    });
+                }
+                (None, Some(eb)) if *eb < 0.0 => {
+                    refined.push(Bracket {
+                        elev_lo: se_lo,
+                        elev_hi: se_hi,
+                        err_lo: 1e6,
+                        err_hi: *eb,
+                    });
+                }
+                _ => {}
+            }
+        }
+    }
+
+    refined
+
 }
 
 // ============================================================

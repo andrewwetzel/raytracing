@@ -91,7 +91,19 @@ export function initGlobe(containerEl) {
     raycaster = new THREE.Raycaster();
     mouse = new THREE.Vector2();
 
-    renderer.domElement.addEventListener('click', onGlobeClickInternal);
+    // Drag-vs-click discrimination: only fire click if mouse barely moved
+    let mouseDownPos = { x: 0, y: 0 };
+    renderer.domElement.addEventListener('mousedown', (e) => {
+        mouseDownPos.x = e.clientX;
+        mouseDownPos.y = e.clientY;
+    });
+    renderer.domElement.addEventListener('click', (e) => {
+        const dx = e.clientX - mouseDownPos.x;
+        const dy = e.clientY - mouseDownPos.y;
+        if (Math.sqrt(dx * dx + dy * dy) < 5) {
+            onGlobeClickInternal(e);
+        }
+    });
 
     // Handle resize
     const ro = new ResizeObserver(() => onResize());
@@ -259,7 +271,6 @@ export function setGlobeVisible(visible) {
 export function disposeGlobe() {
     if (animFrameId) cancelAnimationFrame(animFrameId);
     if (renderer) {
-        renderer.domElement.removeEventListener('click', onGlobeClickInternal);
         renderer.dispose();
         renderer.domElement.remove();
     }
