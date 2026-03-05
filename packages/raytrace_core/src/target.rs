@@ -217,8 +217,6 @@ fn initial_bearing(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
 struct HopLanding {
     lat: f64,
     lon: f64,
-    range_km: f64,
-    absorption: f64,
 }
 
 /// Outcome of a single ray trace for the solver.
@@ -304,8 +302,6 @@ fn fire_ray(
                 hop_landings.push(HopLanding {
                     lat: last.lat_deg,
                     lon: last.lon_deg + lon_offset,
-                    range_km: total_range,
-                    absorption: total_absorption,
                 });
                 lon_offset += last.lon_deg;
             }
