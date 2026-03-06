@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ionotrace — Ionospheric Ray Tracing Engine</title>
+    <meta name="description"
+        content="High-performance ionospheric ray tracing engine. Trace HF radio waves through the ionosphere using Rust, Python, or WebAssembly.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css">
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --bg: #0a0e17;
+            --bg-card: #111827;
+            --bg-code: #0d1117;
+            --border: #1e293b;
+            --text: #e2e8f0;
+            --text-dim: #94a3b8;
+            --accent: #38bdf8;
+            --accent-2: #818cf8;
+            --accent-3: #34d399;
+            --rust: #f97316;
+            --python: #facc15;
+            --wasm: #a78bfa;
+            --glow: rgba(56, 189, 248, 0.08);
+            --radius: 12px;
+            --max-w: 960px;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.7;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ---- Hero ---- */
+        .hero {
+            text-align: center;
+            padding: 6rem 2rem 4rem;
+            background: radial-gradient(ellipse at 50% 0%, rgba(56, 189, 248, 0.08) 0%, transparent 60%);
+        }
+
+        .hero h1 {
+            font-size: clamp(2.4rem, 5vw, 3.6rem);
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero .tagline {
+            font-size: 1.15rem;
+            color: var(--text-dim);
+            max-width: 600px;
+            margin: 1rem auto 2rem;
+        }
+
+        .badges {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .badges img {
+            height: 22px;
+        }
+
+        /* ---- Install strip ---- */
+        .install-strip {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 2.5rem;
+        }
+
+        .install-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 0.8rem 1.5rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            transition: border-color 0.2s;
+        }
+
+        .install-card:hover {
+            border-color: var(--accent);
+        }
+
+        .install-card .lang-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        /* ---- Nav ---- */
+        nav {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(10, 14, 23, 0.85);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border);
+        }
+
+        nav ul {
+            list-style: none;
+            display: flex;
+            gap: 0;
+            max-width: var(--max-w);
+            margin: 0 auto;
+            overflow-x: auto;
+        }
+
+        nav a {
+            display: block;
+            padding: 0.85rem 1.25rem;
+            color: var(--text-dim);
+            text-decoration: none;
+            font-size: 0.85rem;
+            font-weight: 500;
+            white-space: nowrap;
+            border-bottom: 2px solid transparent;
+            transition: color 0.2s, border-color 0.2s;
+        }
+
+        nav a:hover,
+        nav a.active {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+        }
+
+        /* ---- Sections ---- */
+        .container {
+            max-width: var(--max-w);
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        section {
+            padding: 4rem 0;
+        }
+
+        section+section {
+            border-top: 1px solid var(--border);
+        }
+
+        h2 {
+            font-size: 1.6rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.02em;
+        }
+
+        h3 {
+            font-size: 1.15rem;
+            font-weight: 600;
+            margin: 2rem 0 0.75rem;
+            color: var(--text);
+        }
+
+        p {
+            margin-bottom: 1rem;
+            color: var(--text-dim);
+        }
+
+        p a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        p a:hover {
+            text-decoration: underline;
+        }
+
+        /* ---- Feature grid ---- */
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 1rem;
+        }
+
+        .feature-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.25rem 1.5rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .feature-card:hover {
+            border-color: var(--accent);
+            box-shadow: 0 0 20px var(--glow);
+        }
+
+        .feature-card .icon {
+            font-size: 1.3rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .feature-card h4 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 0.35rem;
+        }
+
+        .feature-card p {
+            font-size: 0.85rem;
+            margin: 0;
+            color: var(--text-dim);
+            line-height: 1.5;
+        }
+
+        /* ---- Code blocks ---- */
+        pre {
+            background: var(--bg-code);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.25rem 1.5rem;
+            overflow-x: auto;
+            margin: 1rem 0 1.5rem;
+            font-size: 0.85rem;
+            line-height: 1.65;
+        }
+
+        code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85em;
+        }
+
+        :not(pre)>code {
+            background: var(--bg-card);
+            padding: 0.15em 0.4em;
+            border-radius: 4px;
+            font-size: 0.85em;
+        }
+
+        /* ---- Language tabs ---- */
+        .lang-tabs {
+            display: flex;
+            gap: 0;
+            margin-bottom: -1px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .lang-tab {
+            padding: 0.6rem 1.25rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            border-bottom: none;
+            border-radius: var(--radius) var(--radius) 0 0;
+            background: transparent;
+            color: var(--text-dim);
+            transition: background 0.2s, color 0.2s;
+            font-family: 'Inter', system-ui, sans-serif;
+        }
+
+        .lang-tab.active {
+            background: var(--bg-code);
+            color: var(--text);
+        }
+
+        .lang-tab+.lang-tab {
+            margin-left: -1px;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .tab-content.active>pre {
+            border-top-left-radius: 0;
+            margin-top: 0;
+        }
+
+        /* ---- Table ---- */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0 1.5rem;
+            font-size: 0.9rem;
+        }
+
+        th,
+        td {
+            text-align: left;
+            padding: 0.65rem 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            font-weight: 600;
+            color: var(--text);
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        td {
+            color: var(--text-dim);
+        }
+
+        td code {
+            color: var(--accent);
+        }
+
+        /* ---- Footer ---- */
+        footer {
+            text-align: center;
+            padding: 3rem 2rem;
+            color: var(--text-dim);
+            font-size: 0.85rem;
+            border-top: 1px solid var(--border);
+        }
+
+        footer a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        /* ---- Responsive ---- */
+        @media (max-width: 640px) {
+            .hero {
+                padding: 4rem 1.5rem 3rem;
+            }
+
+            section {
+                padding: 3rem 0;
+            }
+
+            .container {
+                padding: 0 1.25rem;
+            }
+
+            .install-strip {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- ============ Hero ============ -->
+    <header class="hero">
+        <h1>ionotrace</h1>
+        <p class="tagline">
+            High-performance ionospheric ray tracing engine.
+            Simulate HF radio wave propagation through the Earth's ionosphere
+            using Rust, Python, or WebAssembly.
+        </p>
+        <div class="badges">
+            <a href="https://crates.io/crates/ionotrace"><img
+                    src="https://img.shields.io/crates/v/ionotrace.svg?style=flat-square&color=38bdf8"
+                    alt="crates.io"></a>
+            <a href="https://pypi.org/project/ionotrace/"><img
+                    src="https://img.shields.io/pypi/v/ionotrace.svg?style=flat-square&color=facc15" alt="PyPI"></a>
+            <a href="https://docs.rs/ionotrace"><img
+                    src="https://img.shields.io/docsrs/ionotrace?style=flat-square&color=34d399" alt="docs.rs"></a>
+            <a href="https://github.com/andrewwetzel/raytracing"><img
+                    src="https://img.shields.io/github/license/andrewwetzel/raytracing?style=flat-square&color=818cf8"
+                    alt="License"></a>
+        </div>
+        <div class="install-strip">
+            <div class="install-card">
+                <span class="lang-dot" style="background:var(--rust)"></span>
+                cargo add ionotrace
+            </div>
+            <div class="install-card">
+                <span class="lang-dot" style="background:var(--python)"></span>
+                pip install ionotrace
+            </div>
+        </div>
+    </header>
+
+    <!-- ============ Nav ============ -->
+    <nav>
+        <ul>
+            <li><a href="#features">Features</a></li>
+            <li><a href="#quickstart">Quick Start</a></li>
+            <li><a href="#single-ray">Single Ray</a></li>
+            <li><a href="#fan-sweep">Fan Sweep</a></li>
+            <li><a href="#target-solver">Target Solver</a></li>
+            <li><a href="#models">Models</a></li>
+            <li><a href="#export">Export</a></li>
+            <li><a href="#building">Building</a></li>
+        </ul>
+    </nav>
+
+    <!-- ============ Features ============ -->
+    <section id="features">
+        <div class="container">
+            <h2>Features</h2>
+            <div class="features">
+                <div class="feature-card">
+                    <div class="icon">📡</div>
+                    <h4>Full 3D Ray Tracing</h4>
+                    <p>Hamilton's equations in spherical or ECEF coordinates with RK4 / Adams-Moulton adaptive
+                        integration.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">⚡</div>
+                    <h4>Blazing Fast</h4>
+                    <p>Zero-allocation inner loops. Fan sweeps parallelize automatically via Rayon on multi-core
+                        systems.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">🧲</div>
+                    <h4>Magnetic Field</h4>
+                    <p>Dipole, Constant, Cubic, and full IGRF-14 degree-13 spherical harmonics.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">🌍</div>
+                    <h4>Earth Models</h4>
+                    <p>Spherical or WGS-84 spheroid. ECEF integration eliminates polar singularities.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">🎯</div>
+                    <h4>Target Solver</h4>
+                    <p>Find launch angles to hit any geographic target using Nelder-Mead optimization with multi-hop
+                        support.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">🐍</div>
+                    <h4>Python Bindings</h4>
+                    <p>pip-installable package via PyO3. Full API access with Rust performance.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============ Quick Start ============ -->
+    <section id="quickstart">
+        <div class="container">
+            <h2>Quick Start</h2>
+            <p>Trace a 10 MHz ray at 20° elevation with default ionospheric parameters:</p>
+
+            <div class="lang-tabs" data-group="quickstart">
+                <button class="lang-tab active" data-lang="rust" style="color:var(--rust)">Rust</button>
+                <button class="lang-tab" data-lang="python" style="color:var(--python)">Python</button>
+            </div>
+            <div class="tab-content active" data-group="quickstart" data-lang="rust">
+                <pre><code class="language-rust">use ionotrace::TraceConfig;
+
+let result = TraceConfig::new(10.0, 20.0).trace().unwrap();
+
+println!("Max height:   {:.1} km", result.max_height);
+println!("Ground range: {:.1} km", result.ground_range_km);
+println!("Returned:     {}", result.returned_to_ground);</code></pre>
+            </div>
+            <div class="tab-content" data-group="quickstart" data-lang="python">
+                <pre><code class="language-python">import ionotrace
+
+result = ionotrace.TraceConfig(10.0, 20.0).trace()
+
+print(f"Max height:   {result.max_height:.1f} km")
+print(f"Ground range: {result.ground_range_km:.1f} km")
+print(f"Returned:     {result.returned_to_ground}")</code></pre>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============ Single Ray ============ -->
+    <section id="single-ray">
+        <div class="container">
+            <h2>Single Ray Trace</h2>
+            <p>
+                Configure a ray with custom physics parameters using the builder pattern (Rust) or keyword arguments
+                (Python).
+                Every parameter has a sensible default.
+            </p>
+
+            <div class="lang-tabs" data-group="single">
+                <button class="lang-tab active" data-lang="rust" style="color:var(--rust)">Rust</button>
+                <button class="lang-tab" data-lang="python" style="color:var(--python)">Python</button>
+            </div>
+            <div class="tab-content active" data-group="single" data-lang="rust">
+                <pre><code class="language-rust">use ionotrace::{TraceConfig, ModelParams};
+use ionotrace::params::{ElectronDensityModel, MagneticFieldModel};
+
+let params = ModelParams::builder()
+    .ed_model(ElectronDensityModel::DualChapman)
+    .mag_model(MagneticFieldModel::Igrf14)
+    .fc(8.0)    // critical frequency (MHz)
+    .hm(300.0)  // peak height (km)
+    .build()
+    .unwrap();
+
+let mut config = TraceConfig::new(15.0, 30.0);
+config.params = params;
+config.azimuth_deg = 45.0;
+
+let result = config.trace().unwrap();
+println!("Max height: {:.1} km", result.max_height);
+
+for pt in &result.points {
+    println!("  h={:.0}km  lat={:.2}°  lon={:.2}°", pt.height_km, pt.lat_deg, pt.lon_deg);
+}</code></pre>
+            </div>
+            <div class="tab-content" data-group="single" data-lang="python">
+                <pre><code class="language-python">import ionotrace
+
+params = ionotrace.ModelParams(
+    ed_model=ionotrace.ElectronDensityModel.DualChapman,
+    mag_model=ionotrace.MagneticFieldModel.Igrf14,
+    fc=8.0,    # critical frequency (MHz)
+    hm=300.0,  # peak height (km)
+)
+
+config = ionotrace.TraceConfig(15.0, 30.0, azimuth_deg=45.0, params=params)
+result = config.trace()
+print(f"Max height: {result.max_height:.1f} km")
+
+for pt in result.points:
+    print(f"  h={pt.height_km:.0f}km  lat={pt.lat_deg:.2f}°  lon={pt.lon_deg:.2f}°")</code></pre>
+            </div>
+
+            <h3>TraceConfig Fields</h3>
+            <table>
+                <tr>
+                    <th>Field</th>
+                    <th>Type</th>
+                    <th>Default</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>freq_mhz</code></td>
+                    <td>f64</td>
+                    <td>—</td>
+                    <td>Transmit frequency in MHz</td>
+                </tr>
+                <tr>
+                    <td><code>elevation_deg</code></td>
+                    <td>f64</td>
+                    <td>—</td>
+                    <td>Launch elevation angle (degrees)</td>
+                </tr>
+                <tr>
+                    <td><code>azimuth_deg</code></td>
+                    <td>f64</td>
+                    <td>0.0</td>
+                    <td>Launch azimuth (degrees from N)</td>
+                </tr>
+                <tr>
+                    <td><code>tx_lat_deg</code></td>
+                    <td>f64</td>
+                    <td>40.0</td>
+                    <td>Transmitter latitude</td>
+                </tr>
+                <tr>
+                    <td><code>step_size</code></td>
+                    <td>f64</td>
+                    <td>5.0</td>
+                    <td>Integration step size (km)</td>
+                </tr>
+                <tr>
+                    <td><code>max_steps</code></td>
+                    <td>usize</td>
+                    <td>500</td>
+                    <td>Maximum integration steps</td>
+                </tr>
+                <tr>
+                    <td><code>params</code></td>
+                    <td>ModelParams</td>
+                    <td>defaults</td>
+                    <td>Physics model configuration</td>
+                </tr>
+            </table>
+        </div>
+    </section>
+
+    <!-- ============ Fan Sweep ============ -->
+    <section id="fan-sweep">
+        <div class="container">
+            <h2>Fan Sweep</h2>
+            <p>
+                Trace a fan of rays across a range of elevation angles.
+                On native multi-core systems, rays are traced in parallel via Rayon automatically.
+            </p>
+
+            <div class="lang-tabs" data-group="fan">
+                <button class="lang-tab active" data-lang="rust" style="color:var(--rust)">Rust</button>
+                <button class="lang-tab" data-lang="python" style="color:var(--python)">Python</button>
+            </div>
+            <div class="tab-content active" data-group="fan" data-lang="rust">
+                <pre><code class="language-rust">use ionotrace::{fan_trace, FanTraceConfig};
+
+let config = FanTraceConfig {
+    freq_mhz: 10.0,
+    elev_min: 5.0,
+    elev_max: 80.0,
+    elev_step: 2.0,
+    ..FanTraceConfig::default()
+};
+
+let result = fan_trace(&config).unwrap();
+println!("Traced {} rays", result.n_rays);
+
+for ray in &result.rays {
+    if ray.ground {
+        println!("  {:.0}° → {:.0} km (max h: {:.0} km)",
+            ray.elev, ray.range_km, ray.max_h);
+    }
+}</code></pre>
+            </div>
+            <div class="tab-content" data-group="fan" data-lang="python">
+                <pre><code class="language-python">import ionotrace
+
+config = ionotrace.FanTraceConfig(
+    freq_mhz=10.0,
+    elev_min=5.0,
+    elev_max=80.0,
+    elev_step=2.0,
+)
+
+result = ionotrace.fan_trace(config)
+print(f"Traced {result.n_rays} rays")
+
+for ray in result.rays:
+    if ray.ground:
+        print(f"  {ray.elev:.0f}° → {ray.range_km:.0f} km (max h: {ray.max_h:.0f} km)")</code></pre>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============ Target Solver ============ -->
+    <section id="target-solver">
+        <div class="container">
+            <h2>Target Solver</h2>
+            <p>
+                Find the launch elevation and azimuth to hit a specific geographic target.
+                Uses coarse fan scans followed by Nelder-Mead simplex optimization.
+                Supports multi-hop propagation and frequency search.
+            </p>
+
+            <div class="lang-tabs" data-group="target">
+                <button class="lang-tab active" data-lang="rust" style="color:var(--rust)">Rust</button>
+                <button class="lang-tab" data-lang="python" style="color:var(--python)">Python</button>
+            </div>
+            <div class="tab-content active" data-group="target" data-lang="rust">
+                <pre><code class="language-rust">use ionotrace::{solve_target, TargetConfig, SearchSpec};
+
+let config = TargetConfig {
+    target_lat_deg: 50.0,
+    target_lon_deg: 5.0,
+    tx_lat_deg: 40.0,
+    freq_mhz: SearchSpec::Fixed(10.0),
+    error_limit_km: 20.0,
+    ..TargetConfig::default()
+};
+
+let result = solve_target(&config).unwrap();
+println!("Traced {} rays in {:.0} ms", result.rays_traced, result.elapsed_ms);
+
+if let Some(best) = &result.best {
+    println!("Best solution:");
+    println!("  Elevation: {:.1}°", best.elevation_deg);
+    println!("  Azimuth:   {:.1}°", best.azimuth_deg);
+    println!("  Error:     {:.1} km", best.error_km);
+    println!("  Hops:      {}", best.hops);
+}</code></pre>
+            </div>
+            <div class="tab-content" data-group="target" data-lang="python">
+                <pre><code class="language-python">import ionotrace
+
+config = ionotrace.TargetConfig(
+    target_lat_deg=50.0,
+    target_lon_deg=5.0,
+    tx_lat_deg=40.0,
+    freq_mhz=10.0,
+    error_limit_km=20.0,
+)
+
+result = ionotrace.solve_target(config)
+print(f"Traced {result.rays_traced} rays in {result.elapsed_ms:.0f} ms")
+
+if result.best:
+    print("Best solution:")
+    print(f"  Elevation: {result.best.elevation_deg:.1f}°")
+    print(f"  Azimuth:   {result.best.azimuth_deg:.1f}°")
+    print(f"  Error:     {result.best.error_km:.1f} km")
+    print(f"  Hops:      {result.best.hops}")</code></pre>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============ Physics Models ============ -->
+    <section id="models">
+        <div class="container">
+            <h2>Physics Models</h2>
+            <p>
+                Every model component can be swapped independently via <code>ModelParams</code>.
+                The engine is modular — combine any electron density profile with any magnetic field model.
+            </p>
+
+            <table>
+                <tr>
+                    <th>Component</th>
+                    <th>Options</th>
+                </tr>
+                <tr>
+                    <td>Electron Density</td>
+                    <td>Chapman · ELECT1 · Linear · Quasi-Parabolic · Variable Chapman · Dual Chapman</td>
+                </tr>
+                <tr>
+                    <td>Magnetic Field</td>
+                    <td>Dipole · Constant · Cubic · IGRF-14</td>
+                </tr>
+                <tr>
+                    <td>Refractive Index</td>
+                    <td>Full Appleton-Hartree · No Field · No Collisions · Simplified</td>
+                </tr>
+                <tr>
+                    <td>Collisions</td>
+                    <td>Double-Exponential · Single-Exponential · Constant</td>
+                </tr>
+                <tr>
+                    <td>Perturbations</td>
+                    <td>Torus · Trough · Shock · Bulge · Exponential · None</td>
+                </tr>
+                <tr>
+                    <td>Earth Model</td>
+                    <td>Sphere (R = 6370 km) · WGS-84 Spheroid</td>
+                </tr>
+                <tr>
+                    <td>Coordinates</td>
+                    <td>Spherical (r, θ, φ) · ECEF Cartesian (x, y, z)</td>
+                </tr>
+            </table>
+
+            <h3>Key ModelParams Fields</h3>
+            <table>
+                <tr>
+                    <th>Field</th>
+                    <th>Default</th>
+                    <th>Description</th>
+                </tr>
+                <tr>
+                    <td><code>fc</code></td>
+                    <td>10.0</td>
+                    <td>Critical frequency foF2 (MHz)</td>
+                </tr>
+                <tr>
+                    <td><code>hm</code></td>
+                    <td>250.0</td>
+                    <td>Peak height hmF2 (km)</td>
+                </tr>
+                <tr>
+                    <td><code>sh</code></td>
+                    <td>100.0</td>
+                    <td>Scale height (km)</td>
+                </tr>
+                <tr>
+                    <td><code>fh</code></td>
+                    <td>0.8</td>
+                    <td>Gyrofrequency (MHz)</td>
+                </tr>
+                <tr>
+                    <td><code>epoch_year</code></td>
+                    <td>2025.0</td>
+                    <td>IGRF epoch year</td>
+                </tr>
+                <tr>
+                    <td><code>ed_model</code></td>
+                    <td>Chapman</td>
+                    <td>Electron density profile</td>
+                </tr>
+                <tr>
+                    <td><code>mag_model</code></td>
+                    <td>Dipole</td>
+                    <td>Magnetic field model</td>
+                </tr>
+                <tr>
+                    <td><code>earth_model</code></td>
+                    <td>Sphere</td>
+                    <td>Earth shape model</td>
+                </tr>
+            </table>
+        </div>
+    </section>
+
+    <!-- ============ Export ============ -->
+    <section id="export">
+        <div class="container">
+            <h2>Exporting Results</h2>
+            <p>Save trace results to CSV or JSON for analysis in other tools.</p>
+
+            <div class="lang-tabs" data-group="export">
+                <button class="lang-tab active" data-lang="rust" style="color:var(--rust)">Rust</button>
+                <button class="lang-tab" data-lang="python" style="color:var(--python)">Python</button>
+            </div>
+            <div class="tab-content active" data-group="export" data-lang="rust">
+                <pre><code class="language-rust">use ionotrace::{TraceConfig, export_trace_csv, export_json};
+
+let result = TraceConfig::new(10.0, 20.0).trace().unwrap();
+
+let csv = export_trace_csv(&result).unwrap();
+std::fs::write("trace.csv", &csv).unwrap();
+
+let json = export_json(&result).unwrap();
+std::fs::write("trace.json", &json).unwrap();</code></pre>
+            </div>
+            <div class="tab-content" data-group="export" data-lang="python">
+                <pre><code class="language-python">import ionotrace
+
+result = ionotrace.TraceConfig(10.0, 20.0).trace()
+
+csv_str = result.to_csv()
+with open("trace.csv", "w") as f:
+    f.write(csv_str)
+
+json_str = result.to_json()
+with open("trace.json", "w") as f:
+    f.write(json_str)</code></pre>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============ Building ============ -->
+    <section id="building">
+        <div class="container">
+            <h2>Building from Source</h2>
+
+            <h3>Rust</h3>
+            <pre><code class="language-bash">cargo add ionotrace
+
+# Or build from source
+git clone https://github.com/andrewwetzel/raytracing.git
+cd raytracing/packages/raytrace_core
+cargo build --release
+cargo test</code></pre>
+
+            <h3>Python</h3>
+            <pre><code class="language-bash">pip install ionotrace
+
+# Or build from source (requires Rust toolchain)
+git clone https://github.com/andrewwetzel/raytracing.git
+cd raytracing/packages/ionotrace-python
+pip install maturin
+maturin develop --release</code></pre>
+
+            <h3>WebAssembly</h3>
+            <pre><code class="language-bash">cd packages/raytrace_core
+wasm-pack build --target web --out-dir ../../apps/frontend/pkg</code></pre>
+
+            <h3>Algorithm</h3>
+            <p>
+                Solves Hamilton's equations <code>H = ½(c²k²/ω² − n²)</code> where n² is the complex refractive index
+                from the Appleton-Hartree formula. Integration uses 4th-order Runge-Kutta with Adams-Moulton
+                predictor-corrector and adaptive step-size control.
+            </p>
+            <p>
+                Based on: <em>A Versatile Three-Dimensional Ray Tracing Computer Program for Radio Waves in the
+                    Ionosphere</em>,
+                R. M. Jones &amp; J. J. Stephenson, OT Report 75-76 (1975).
+                <a href="https://www.ionolab.org/pubs/OT_Report_75_76.pdf">PDF</a>
+            </p>
+        </div>
+    </section>
+
+    <!-- ============ Footer ============ -->
+    <footer>
+        <p>
+            <strong>ionotrace</strong> · MIT License ·
+            <a href="https://github.com/andrewwetzel/raytracing">GitHub</a> ·
+            <a href="https://crates.io/crates/ionotrace">crates.io</a> ·
+            <a href="https://pypi.org/project/ionotrace/">PyPI</a> ·
+            <a href="https://docs.rs/ionotrace">docs.rs</a>
+        </p>
+    </footer>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/languages/rust.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/languages/python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/languages/bash.min.js"></script>
+    <script>
+        hljs.highlightAll();
+
+        document.querySelectorAll('.lang-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                const group = tab.closest('.lang-tabs').dataset.group;
+                const lang = tab.dataset.lang;
+
+                document.querySelectorAll(`.lang-tab[data-lang]`).forEach(t => {
+                    if (t.closest('.lang-tabs').dataset.group === group) {
+                        t.classList.toggle('active', t.dataset.lang === lang);
+                    }
+                });
+                document.querySelectorAll(`.tab-content[data-group="${group}"]`).forEach(c => {
+                    c.classList.toggle('active', c.dataset.lang === lang);
+                });
+            });
+        });
+
+        // Sync all tabs globally when clicking any tab
+        document.querySelectorAll('.lang-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                const lang = tab.dataset.lang;
+                document.querySelectorAll('.lang-tabs').forEach(tabGroup => {
+                    const group = tabGroup.dataset.group;
+                    tabGroup.querySelectorAll('.lang-tab').forEach(t => {
+                        t.classList.toggle('active', t.dataset.lang === lang);
+                    });
+                    document.querySelectorAll(`.tab-content[data-group="${group}"]`).forEach(c => {
+                        c.classList.toggle('active', c.dataset.lang === lang);
+                    });
+                });
+            });
+        });
+
+        // Sticky nav active state
+        const sections = document.querySelectorAll('section[id]');
+        const navLinks = document.querySelectorAll('nav a');
+        window.addEventListener('scroll', () => {
+            let current = '';
+            sections.forEach(s => {
+                if (window.scrollY >= s.offsetTop - 100) current = s.id;
+            });
+            navLinks.forEach(a => {
+                a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+            });
+        });
+    </script>
+</body>
+
+</html>
