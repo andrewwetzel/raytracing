@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "ionotrace"
-version = "0.5.1"
+version = "0.5.2"
 description = "High-performance ionospheric ray tracing engine — Python bindings for the Rust ionotrace crate"
 readme = "README.md"
 license = { text = "MIT" }

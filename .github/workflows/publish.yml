@@ -70,6 +70,8 @@ jobs:
             - name: Publish to crates.io
               working-directory: packages/raytrace_core
               run: cargo publish --allow-dirty
+              env:
+                  CARGO_REGISTRY_GLOBAL_CREDENTIAL_PROVIDERS: cargo:token cargo:oidc
 
     tag-release:
         needs: [check-version, publish-pypi, publish-crate]
