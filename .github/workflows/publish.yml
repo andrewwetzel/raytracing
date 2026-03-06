@@ -67,11 +67,20 @@ jobs:
 
             - uses: dtolnay/rust-toolchain@stable
 
-            - name: Publish to crates.io
+            - name: Get OIDC token and publish
               working-directory: packages/raytrace_core
-              run: cargo publish --allow-dirty
-              env:
-                  CARGO_REGISTRY_GLOBAL_CREDENTIAL_PROVIDERS: cargo:token cargo:oidc
+              run: |
+                  # Get GitHub OIDC token for crates.io audience
+                  OIDC_TOKEN=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+                    "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=crates.io" | jq -r '.value')
+
+                  # Exchange OIDC token for a crates.io API token
+                  CRATES_TOKEN=$(curl -sS -X POST https://crates.io/api/v1/trusted_publishing/tokens \
+                    -H "Content-Type: application/json" \
+                    -d "{\"jwt\": \"$OIDC_TOKEN\"}" | jq -r '.token')
+
+                  # Publish using the temporary token
+                  CARGO_REGISTRY_TOKEN="$CRATES_TOKEN" cargo publish --allow-dirty
 
     tag-release:
         needs: [check-version, publish-pypi, publish-crate]
