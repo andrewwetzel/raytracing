@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ionotrace"
+version = "0.1.0"
+description = "High-performance ionospheric ray tracing engine — Python bindings for the Rust ionotrace crate"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [{name = "Andrew Wetzel", email = "andrew@wetzel.work"}]
+
+[tool.setuptools.packages.find]
+where = ["src"]

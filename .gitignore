@@ -23,6 +23,12 @@ packages/ft_raytrace/build/
 packages/ft_raytrace/test_*
 !packages/ft_raytrace/test/
 
+# Python
+.venv/
+__pycache__/
+*.egg-info/
+dist/
+
 # Rust build artifacts
 **/target/
 
@@ -45,3 +51,6 @@ test-results/
 # OS
 .DS_Store
 Thumbs.db
+
+
+pharlap_4.7.4/
