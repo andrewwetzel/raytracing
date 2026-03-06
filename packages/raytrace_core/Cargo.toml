@@ -1,6 +1,6 @@
 [package]
 name = "ionotrace"
-version = "0.3.1"
+version = "0.5.0"
 edition = "2021"
 rust-version = "1.70"
 authors = ["Andrew Wetzel <andrew@wetzel.work>"]
@@ -30,7 +30,20 @@ wasm-bindgen = "0.2"
 js-sys = "0.3"
 
 [dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
 tracing-subscriber = "0.3.22"
+
+[[bench]]
+name = "bench_single_ray"
+harness = false
+
+[[bench]]
+name = "bench_fan_trace"
+harness = false
+
+[[bench]]
+name = "bench_throughput"
+harness = false
 
 [package.metadata.docs.rs]
 all-features = true

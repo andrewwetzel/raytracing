@@ -1,15 +1,43 @@
-name: Publish to PyPI
+name: Release
 
 on:
-    workflow_dispatch:
+    push:
+        branches: [main]
 
 jobs:
-    publish:
+    check-version:
+        runs-on: ubuntu-latest
+        outputs:
+            version: ${{ steps.current.outputs.version }}
+            changed: ${{ steps.compare.outputs.changed }}
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  fetch-depth: 2
+
+            - name: Read current version
+              id: current
+              run: echo "version=$(cat VERSION | tr -d '[:space:]')" >> "$GITHUB_OUTPUT"
+
+            - name: Check version changed
+              id: compare
+              run: |
+                  CURRENT=$(cat VERSION | tr -d '[:space:]')
+                  PREVIOUS=$(git show HEAD~1:VERSION 2>/dev/null | tr -d '[:space:]' || echo "")
+                  if [ "$CURRENT" = "$PREVIOUS" ]; then
+                    echo "changed=false" >> "$GITHUB_OUTPUT"
+                    echo "::error::VERSION file was not bumped ($CURRENT). Every push to main must include a version bump."
+                    exit 1
+                  fi
+                  echo "changed=true" >> "$GITHUB_OUTPUT"
+                  echo "Version bumped: $PREVIOUS → $CURRENT"
+
+    publish-pypi:
+        needs: check-version
         runs-on: ubuntu-latest
         environment: pypi
         permissions:
             id-token: write
-
         steps:
             - uses: actions/checkout@v4
 
@@ -17,12 +45,40 @@ jobs:
               with:
                   python-version: "3.12"
 
-            - name: Build
+            - name: Build placeholder package
               run: |
                   pip install build
                   python -m build packages/ionotrace-python/placeholder
 
-            - name: Publish
+            - name: Publish to PyPI
               uses: pypa/gh-action-pypi-publish@release/v1
               with:
                   packages-dir: packages/ionotrace-python/placeholder/dist/
+
+    publish-crate:
+        needs: check-version
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: dtolnay/rust-toolchain@stable
+
+            - name: Publish to crates.io
+              working-directory: packages/raytrace_core
+              run: cargo publish --allow-dirty
+              env:
+                  CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+    tag-release:
+        needs: [check-version, publish-pypi, publish-crate]
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Create git tag
+              run: |
+                  VERSION=${{ needs.check-version.outputs.version }}
+                  git tag "v${VERSION}"
+                  git push origin "v${VERSION}"
