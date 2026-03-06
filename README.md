@@ -101,6 +101,15 @@ dkr/dt  =  ∂H/∂r   / (∂H/∂ω · c) + ...
 
 where `H = ½(c²k²/ω² - n²)` is the Hamiltonian and `n²` is the complex refractive index from the Appleton-Hartree formula. Integration uses RK4 with Adams-Moulton predictor-corrector.
 
+## Validation against PHaRLAP
+
+`ionotrace` has been extensively validated against the reference [PHaRLAP](https://www.dst.defence.gov.au/our-technologies/pharlap) ray tracing engine across 168 challenging scenarios. 
+
+* **Scenarios tested:** 12 configurations targeting near-critical frequencies, thick layers (ymF2=150), very low elevations (3°), and high electron densities (foF2=15).
+* **Return Agreement:** 93% agreement on whether a ray penetrates or reflects.
+* **Accuracy:** Mean ground range difference of **0.53%** (median 0.08%).
+* **Physics Defaults:** `ionotrace` defaults to accurate physical models: **WGS-84** geodetic Earth and the **IGRF-14** magnetic field.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing, and PR guidelines.

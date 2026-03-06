@@ -205,6 +205,7 @@ pub fn fan_trace(config: &FanTraceConfig) -> Result<FanTraceResult, TraceError> 
                     config.azimuth_deg,
                     cur_lat,
                     2,
+                    crate::params::CoordinateSystem::Spherical,
                     config.step_size,
                     config.max_steps,
                     1e-4,

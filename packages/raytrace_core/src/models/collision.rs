@@ -33,7 +33,12 @@ fn expz2(r: f64, _theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> Coll
     let h = (r - p.earth_r).max(0.0);
     let omega = PIT2 * freq_mhz * 1.0e6;
     if omega == 0.0 {
-        return CollisionResult { z: 0.0, dzdr: 0.0, dzdth: 0.0, dzdph: 0.0 };
+        return CollisionResult {
+            z: 0.0,
+            dzdr: 0.0,
+            dzdth: 0.0,
+            dzdph: 0.0,
+        };
     }
 
     let arg1 = (-p.a1 * (h - p.h1)).clamp(-20.0, 20.0);
@@ -69,7 +74,12 @@ fn expz(r: f64, _theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> Colli
     let h = (r - p.earth_r).max(0.0);
     let omega = PIT2 * freq_mhz * 1.0e6;
     if omega == 0.0 {
-        return CollisionResult { z: 0.0, dzdr: 0.0, dzdth: 0.0, dzdph: 0.0 };
+        return CollisionResult {
+            z: 0.0,
+            dzdr: 0.0,
+            dzdth: 0.0,
+            dzdph: 0.0,
+        };
     }
 
     let arg1 = (-p.a1 * (h - p.h1)).clamp(-20.0, 20.0);

@@ -14,6 +14,31 @@ serve-static port="9000":
     npx -y serve apps/frontend -l {{port}}
 
 # ===================================================================
+# Benchmarks (criterion)
+# ===================================================================
+
+# Run ALL criterion benchmarks
+bench:
+    @echo "--- Running all ionotrace benchmarks ---"
+    cd packages/raytrace_core && cargo bench
+    @echo "✅ All benchmarks complete — reports in packages/raytrace_core/target/criterion/"
+
+# Single-ray benchmarks (elevation, frequency, azimuth, latitude, models, …)
+bench-single:
+    @echo "--- Single-ray benchmarks ---"
+    cd packages/raytrace_core && cargo bench --bench bench_single_ray
+
+# Fan trace benchmarks (sweep sizes, models, hops)
+bench-fan:
+    @echo "--- Fan trace benchmarks ---"
+    cd packages/raytrace_core && cargo bench --bench bench_fan_trace
+
+# Bulk throughput benchmarks (rays/second)
+bench-throughput:
+    @echo "--- Throughput benchmarks ---"
+    cd packages/raytrace_core && cargo bench --bench bench_throughput
+
+# ===================================================================
 # Fortran Examples & Tests
 # ===================================================================
 

@@ -1,6 +1,9 @@
 //! Physical constants and model parameters for ionospheric ray tracing.
 
 use std::f64::consts::PI;
+use std::sync::Arc;
+
+use crate::grid::IonosphereGrid;
 
 /// 2π
 pub(crate) const PIT2: f64 = 2.0 * PI;
@@ -38,6 +41,9 @@ pub enum ElectronDensityModel {
     VarChapman,
     /// Dual Chapman — two superimposed layers (E + F2 regions).
     DualChapman,
+    /// Grid interpolation — 3D trilinear interpolation from empirical data
+    /// (IRI-2020, NeQuick, etc.). Requires `ed_grid` to be set on [`ModelParams`].
+    GridInterp,
 }
 
 /// Magnetic field model.
@@ -48,14 +54,14 @@ pub enum ElectronDensityModel {
     serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq, Hash,
 )]
 pub enum MagneticFieldModel {
-    /// Centered dipole — simple but captures essential field geometry.
-    #[default]
+    /// Centered dipole — simple approximation.
     Dipole,
     /// Constant — uniform field everywhere (for isolating magneto-ionic effects).
     Constant,
     /// Cubic — higher-order polynomial with fixed dip angle.
     Cubic,
-    /// IGRF-14 — degree-13 spherical harmonics with epoch interpolation (2020–2030).
+    /// IGRF-14 — **default**. Degree-13 spherical harmonics (epoch 2025.0).
+    #[default]
     Igrf14,
 }
 
@@ -93,6 +99,9 @@ pub enum RefractiveIndexModel {
     NoFieldWithCollisions,
     /// With field, no collisions — O/X splitting but no absorption.
     WithFieldNoCollisions,
+    /// Sen-Wyller — velocity-dependent collision frequencies via Dingle integrals.
+    /// More accurate D-region absorption than Appleton-Hartree (5–15 dB difference at LF/MF).
+    SenWyller,
 }
 
 /// Ionospheric perturbation model.
@@ -143,6 +152,41 @@ impl RayMode {
     }
 }
 
+/// Earth shape model.
+///
+/// Selects whether the Earth is treated as a perfect sphere or the
+/// WGS-84 oblate spheroid for altitude and ground-range calculations.
+#[non_exhaustive]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq, Hash,
+)]
+pub enum EarthModel {
+    /// Perfect sphere with radius [`EARTH_RADIUS`] (legacy, less accurate).
+    Sphere,
+    /// WGS-84 oblate spheroid — **default**. More accurate, matches PHaRLAP.
+    #[default]
+    Wgs84,
+}
+
+/// Integration coordinate system.
+///
+/// Controls whether Hamilton's equations are integrated natively in spherical
+/// coordinates or in singularity-free ECEF Cartesian coordinates.
+#[non_exhaustive]
+#[derive(
+    serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq, Hash,
+)]
+pub enum CoordinateSystem {
+    /// Spherical geocentric `(r, θ, φ)` — original OT 75-76 formulation.
+    /// Has a numerical singularity at geographic poles.
+    #[default]
+    Spherical,
+    /// Earth-Centered Earth-Fixed Cartesian `(x, y, z)` — singularity-free.
+    /// Physics models are evaluated in spherical coordinates internally via
+    /// Jacobian transforms.
+    Ecef,
+}
+
 // ============================================================
 // Model Parameters
 // ============================================================
@@ -172,8 +216,10 @@ impl RayMode {
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, derive_builder::Builder)]
 #[builder(default, setter(into))]
 pub struct ModelParams {
-    /// Earth radius in km (default: 6370.0).
+    /// Earth radius in km (default: 6370.0, used when `earth_model == Sphere`).
     pub earth_r: f64,
+    /// Earth shape model (default: Sphere).
+    pub earth_model: EarthModel,
 
     // ---- Model selectors ----
     /// Electron density profile model.
@@ -186,6 +232,13 @@ pub struct ModelParams {
     pub rindex_model: RefractiveIndexModel,
     /// Ionospheric perturbation model.
     pub pert_model: PerturbationModel,
+
+    /// 3D ionosphere grid for `GridInterp` electron density model.
+    /// Loaded via [`IonosphereGrid::from_csv`] or [`IonosphereGrid::from_json`].
+    /// Ignored when `ed_model` is not `GridInterp`.
+    #[serde(skip)]
+    #[builder(default)]
+    pub ed_grid: Option<Arc<IonosphereGrid>>,
 
     // ---- Electron density parameters ----
     /// Critical frequency foF2 in MHz (default: 10.0).
@@ -287,10 +340,16 @@ impl ModelParams {
             return Err(format!("hm (hmF2) must be non-negative, got {}", self.hm));
         }
         if self.sh < 0.0 {
-            return Err(format!("sh (scale height) must be non-negative, got {}", self.sh));
+            return Err(format!(
+                "sh (scale height) must be non-negative, got {}",
+                self.sh
+            ));
         }
         if self.fh < 0.0 {
-            return Err(format!("fh (gyrofrequency) must be non-negative, got {}", self.fh));
+            return Err(format!(
+                "fh (gyrofrequency) must be non-negative, got {}",
+                self.fh
+            ));
         }
         Ok(())
     }
@@ -300,11 +359,13 @@ impl Default for ModelParams {
     fn default() -> Self {
         Self {
             earth_r: EARTH_RADIUS,
+            earth_model: EarthModel::default(),
             ed_model: ElectronDensityModel::default(),
             mag_model: MagneticFieldModel::default(),
             col_model: CollisionModel::default(),
             rindex_model: RefractiveIndexModel::default(),
             pert_model: PerturbationModel::default(),
+            ed_grid: None,
             fc: 10.0,
             hm: 250.0,
             sh: 100.0,

@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-03-06
+
+### Added
+
+#### ECEF Coordinate Integration (Issue #1 — Polar Singularity Fix)
+- **New module `ecef.rs`**: Spherical ↔ ECEF Cartesian coordinate transforms for position, wave vector, and Hamiltonian gradients (Jacobian-based).
+- **New module `hamiltonian_ecef.rs`**: ECEF Hamiltonian wrapper that evaluates physics models in their native spherical coordinates and transforms gradients back to ECEF via the Jacobian — no coordinate singularities.
+- **ECEF integrator wrappers**: `rk4_step_ecef`, `am_step_ecef`, and `exit_routine_ecef` in `tracer.rs` mirror the spherical integrator but call the ECEF Hamiltonian.
+- **`CoordinateSystem` enum** (`Spherical` | `Ecef`) in `params.rs` — selects integration coordinate system. Default: `Spherical` (backward-compatible).
+- `TraceConfig.coord_system` field for per-trace coordinate system selection.
+
+#### WGS-84 Oblate Spheroid (Issue #4 — Spherical Earth Fix)
+- **New module `wgs84.rs`**: WGS-84 constants, Bowring geocentric ↔ geodetic conversion, geodetic altitude, ellipsoid surface radius, and Vincenty geodesic distance.
+- **`EarthModel` enum** (`Sphere` | `Wgs84`) in `params.rs` — selects Earth shape model. Default: `Sphere` (backward-compatible).
+- `ModelParams.earth_model` field for per-trace Earth model selection.
+- When `Wgs84` is active: altitude uses geodetic height above ellipsoid; ground range uses Vincenty distance.
+
+#### Empirical Ionosphere Grid Ingestion (Issue #3)
+- **New module `grid.rs`**: 3D trilinear-interpolated ionosphere model. Accepts regular `fp(alt, lat, lon)` grids from IRI-2020, NeQuick, SAMI3, or custom sources.
+- `IonosphereGrid::from_csv` and `IonosphereGrid::from_json` loaders for easy interop with Python/MATLAB toolkits.
+- Finite-difference spatial gradients (∂X/∂r, ∂X/∂θ, ∂X/∂φ) computed automatically via central differences.
+- **`GridInterp`** variant added to `ElectronDensityModel` enum.
+- `ModelParams.ed_grid: Option<Arc<IonosphereGrid>>` field — thread-safe grid data sharing for parallel fan traces.
+
+#### Sen-Wyller Magneto-Ionic Theory (Issue #5)
+- **Sen-Wyller dispersion relation** (`swwfwc`): velocity-dependent collision frequencies via Dingle integral Padé approximations (G₁, G₂, G₃).
+- **`SenWyller`** variant added to `RefractiveIndexModel` enum — provides 5–15 dB more accurate D-region absorption than standard Appleton-Hartree.
+- ∂n²/∂Z computed via central finite differences on the Dingle integrals for robust Hamiltonian gradient flow.
+
+### Changed
+- `trace_ray` now accepts a `coord_system` parameter and dispatches to `trace_ray_spherical` (legacy) or `trace_ray_ecef` (new).
+- Spherical path now supports WGS-84 altitude and ground range when `earth_model = Wgs84`.
+
+### Tests
+- Expanded test suite from 118 to 156 tests:
+  - 8 new WGS-84 unit tests (geodetic roundtrip, polar/equatorial altitude, Vincenty distance, ellipsoid radii, sphere vs WGS-84 comparison)
+  - 6 new ECEF unit tests (position/k-vector roundtrip, magnitude preservation, gradient transforms at equator and pole)
+  - 3 new ECEF Hamiltonian tests (initial call, near-pole stability, mid-latitude agreement with spherical path)
+  - 8 new grid interpolation tests (trilinear exact/midpoint/clamping, gradient accuracy, CSV/JSON roundtrip, profile shape)
+  - 6 new Sen-Wyller tests (Dingle integral limits, finiteness, AH convergence, D-region absorption comparison, derivative finiteness)
+
 ## [0.3.1] - 2026-03-05
 
 ### Added

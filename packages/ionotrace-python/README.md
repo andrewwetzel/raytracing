@@ -38,6 +38,12 @@ if solution.best:
     print(f"Elevation: {solution.best.elevation_deg:.1f}°, Error: {solution.best.error_km:.1f} km")
 ```
 
+## Validation & Accuracy
+
+`ionotrace` runs accurate physical models by default, including a **WGS-84** geodetic Earth and the **IGRF-14** harmonic magnetic field. 
+
+It has been extensively validated against the reference [PHaRLAP](https://www.dst.defence.gov.au/our-technologies/pharlap) Fortran engine across 168 challenging scenarios (including very low elevations, thick ionospheric layers, and near-critical frequencies). Across all returning rays, `ionotrace` matches PHaRLAP with a mean ground range difference of **0.53%**.
+
 ## License
 
 MIT

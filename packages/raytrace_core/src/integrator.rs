@@ -74,7 +74,9 @@ impl IntegratorState {
 }
 
 pub(crate) fn rk4_step(s: &mut IntegratorState, freq_mhz: f64, ray_mode: f64, p: &ModelParams) {
-    if s.diverged { return; }
+    if s.diverged {
+        return;
+    }
     let bet = [0.5, 0.5, 1.0, 0.0];
     let mut dely = [[0.0f64; NN]; 4];
     let mm = s.mm;
@@ -125,7 +127,9 @@ pub(crate) fn rk4_step(s: &mut IntegratorState, freq_mhz: f64, ray_mode: f64, p:
 }
 
 pub(crate) fn am_step(s: &mut IntegratorState, freq_mhz: f64, ray_mode: f64, p: &ModelParams) {
-    if s.diverged { return; }
+    if s.diverged {
+        return;
+    }
     let mut dely1 = [0.0f64; NN];
 
     // Predictor (Adams-Bashforth)

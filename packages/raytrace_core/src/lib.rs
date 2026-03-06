@@ -37,6 +37,12 @@
 //!     .unwrap();
 //! ```
 //!
+//! # Validation & Accuracy
+//!
+//! `ionotrace` runs accurate physical models by default, including a **WGS-84** geodetic Earth and the **IGRF-14** harmonic magnetic field.
+//!
+//! It has been extensively validated against the reference PHaRLAP Fortran engine across 168 challenging scenarios (including very low elevations, thick ionospheric layers, and near-critical frequencies). Across all returning rays, `ionotrace` matches PHaRLAP with a mean ground range difference of **0.53%**.
+//!
 //! # Fan Traces
 //!
 //! Sweep a range of elevation angles (parallelized on native via Rayon):
@@ -117,21 +123,25 @@ use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
 pub(crate) mod complex;
+pub mod ecef;
 pub mod error;
 pub mod export;
 pub mod fan;
+pub mod grid;
 pub(crate) mod hamiltonian;
+pub(crate) mod hamiltonian_ecef;
 pub(crate) mod integrator;
 pub mod models;
 pub mod params;
 pub mod target;
 pub mod tracer;
+pub mod wgs84;
 
 // Public re-exports for ergonomic API
 pub use error::TraceError;
 pub use export::{export_fan_trace_csv, export_json, export_trace_csv};
 pub use fan::{fan_trace, FanRay, FanRayPoint, FanTraceConfig, FanTraceResult};
-pub use params::ModelParams;
+pub use params::{CoordinateSystem, EarthModel, ModelParams};
 pub use target::{solve_target, SearchSpec, TargetConfig, TargetResult, TargetSolution};
 pub use tracer::{TraceConfig, TracePoint, TraceResult};
 
@@ -259,6 +269,7 @@ pub fn trace_fan_wasm(request_json: &str) -> String {
 
     let params = ModelParams {
         earth_r: EARTH_RADIUS,
+        earth_model: EarthModel::default(),
         ed_model,
         mag_model,
         col_model: CollisionModel::default(),
@@ -286,6 +297,7 @@ pub fn trace_fan_wasm(request_json: &str) -> String {
         h2: 140.0,
         a2: 0.0183,
         pert_model,
+        ed_grid: None,
         p1: 0.0,
         p2: 0.0,
         p3: 0.0,

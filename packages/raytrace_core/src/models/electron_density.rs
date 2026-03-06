@@ -46,7 +46,13 @@ pub fn compute_ed(
 /// Chapman layer (CHAPX) — default
 fn chapx(r: f64, theta: f64, _phi: f64, freq_mhz: f64, p: &ModelParams) -> ElectronDensityResult {
     if p.sh <= 0.0 {
-        return ElectronDensityResult { x: 0.0, dxdr: 0.0, dxdth: 0.0, dxdph: 0.0, dxdt: 0.0 };
+        return ElectronDensityResult {
+            x: 0.0,
+            dxdr: 0.0,
+            dxdth: 0.0,
+            dxdph: 0.0,
+            dxdt: 0.0,
+        };
     }
     let theta2 = theta - PID2;
     let hmax = p.hm + p.earth_r * p.ed_e * theta2;
@@ -88,7 +94,13 @@ fn elect1_ed(
     p: &ModelParams,
 ) -> ElectronDensityResult {
     if p.sh <= 0.0 {
-        return ElectronDensityResult { x: 0.0, dxdr: 0.0, dxdth: 0.0, dxdph: 0.0, dxdt: 0.0 };
+        return ElectronDensityResult {
+            x: 0.0,
+            dxdr: 0.0,
+            dxdth: 0.0,
+            dxdph: 0.0,
+            dxdt: 0.0,
+        };
     }
     let h = r - p.earth_r;
     let z = (h - p.hm) / p.sh;
@@ -623,7 +635,11 @@ mod tests {
         // Torus
         let mut p = default_params();
         p.pert_model = crate::params::PerturbationModel::Torus;
-        p.p1 = 0.5; p.p2 = 200.0; p.p3 = 200.0; p.p4 = 0.3; p.p5 = 250.0;
+        p.p1 = 0.5;
+        p.p2 = 200.0;
+        p.p3 = 200.0;
+        p.p4 = 0.3;
+        p.p5 = 250.0;
         let ed = compute_ed(r, PID2, 0.0, p.fc, &p);
         assert!(ed.x.is_finite(), "Torus x not finite");
         assert!(ed.dxdr.is_finite(), "Torus dxdr not finite");
@@ -631,7 +647,10 @@ mod tests {
         // Trough
         let mut p = default_params();
         p.pert_model = crate::params::PerturbationModel::Trough;
-        p.p1 = -0.3; p.p2 = 0.1; p.p3 = 0.0; p.p4 = 1.0;
+        p.p1 = -0.3;
+        p.p2 = 0.1;
+        p.p3 = 0.0;
+        p.p4 = 1.0;
         let ed = compute_ed(r, PID2, 0.0, p.fc, &p);
         assert!(ed.x.is_finite(), "Trough x not finite");
         assert!(ed.dxdr.is_finite(), "Trough dxdr not finite");
@@ -639,8 +658,12 @@ mod tests {
         // Shock
         let mut p = default_params();
         p.pert_model = crate::params::PerturbationModel::Shock;
-        p.p1 = 0.2; p.p2 = 100.0; p.p3 = 0.0; p.p4 = 0.0;
-        p.p5 = 1.0; p.p6 = 200.0;
+        p.p1 = 0.2;
+        p.p2 = 100.0;
+        p.p3 = 0.0;
+        p.p4 = 0.0;
+        p.p5 = 1.0;
+        p.p6 = 200.0;
         let ed = compute_ed(r, PID2, 0.5, p.fc, &p);
         assert!(ed.x.is_finite(), "Shock x not finite");
         assert!(ed.dxdr.is_finite(), "Shock dxdr not finite");
@@ -648,8 +671,14 @@ mod tests {
         // Bulge
         let mut p = default_params();
         p.pert_model = crate::params::PerturbationModel::Bulge;
-        p.p1 = 200.0; p.p2 = 50.0; p.p3 = 0.1; p.p4 = 0.5;
-        p.p5 = PID2; p.p6 = 0.0; p.p7 = 0.3; p.p8 = 0.5;
+        p.p1 = 200.0;
+        p.p2 = 50.0;
+        p.p3 = 0.1;
+        p.p4 = 0.5;
+        p.p5 = PID2;
+        p.p6 = 0.0;
+        p.p7 = 0.3;
+        p.p8 = 0.5;
         let ed = compute_ed(r, PID2, 0.0, p.fc, &p);
         assert!(ed.x.is_finite(), "Bulge x not finite");
         assert!(ed.dxdr.is_finite(), "Bulge dxdr not finite");
@@ -657,7 +686,9 @@ mod tests {
         // Exponential
         let mut p = default_params();
         p.pert_model = crate::params::PerturbationModel::Exponential;
-        p.p1 = 200.0; p.p2 = 50.0; p.p3 = 0.1;
+        p.p1 = 200.0;
+        p.p2 = 50.0;
+        p.p3 = 0.1;
         let ed = compute_ed(r, PID2, 0.0, p.fc, &p);
         assert!(ed.x.is_finite(), "Exponential x not finite");
         assert!(ed.dxdr.is_finite(), "Exponential dxdr not finite");
@@ -724,12 +755,24 @@ mod tests {
         // Bulge perturbation at a point far from center should still be finite
         let mut p = default_params();
         p.pert_model = crate::params::PerturbationModel::Bulge;
-        p.p1 = 200.0; p.p2 = 50.0; p.p3 = 0.1; p.p4 = 0.5;
-        p.p5 = 0.0; p.p6 = 0.0; p.p7 = 0.3; p.p8 = 0.5;
+        p.p1 = 200.0;
+        p.p2 = 50.0;
+        p.p3 = 0.1;
+        p.p4 = 0.5;
+        p.p5 = 0.0;
+        p.p6 = 0.0;
+        p.p7 = 0.3;
+        p.p8 = 0.5;
         // r very far from perturbation center
         let r = EARTH_RADIUS + 5000.0;
         let ed = compute_ed(r, PID2, 0.0, p.fc, &p);
-        assert!(ed.x.is_finite(), "Bulge at extreme distance: x should be finite");
-        assert!(ed.dxdr.is_finite(), "Bulge at extreme distance: dxdr should be finite");
+        assert!(
+            ed.x.is_finite(),
+            "Bulge at extreme distance: x should be finite"
+        );
+        assert!(
+            ed.dxdr.is_finite(),
+            "Bulge at extreme distance: dxdr should be finite"
+        );
     }
 }

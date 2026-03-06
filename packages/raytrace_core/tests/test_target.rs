@@ -1,8 +1,14 @@
-//! Integration tests for the target location solver.
-
 use ionotrace::params::*;
 use ionotrace::target::{solve_target, SearchSpec, TargetConfig};
 use ionotrace::tracer::TraceConfig;
+
+/// Deterministic test params — isolated from default model changes.
+fn test_params() -> ModelParams {
+    let mut p = ModelParams::default();
+    p.earth_model = EarthModel::Sphere;
+    p.mag_model = MagneticFieldModel::Dipole;
+    p
+}
 
 /// Helper: trace a ray and return its landing coordinates so we can use them as a known target.
 fn known_landing(freq: f64, elev: f64, az: f64, tx_lat: f64) -> (f64, f64, f64) {
@@ -10,6 +16,7 @@ fn known_landing(freq: f64, elev: f64, az: f64, tx_lat: f64) -> (f64, f64, f64) 
     cfg.azimuth_deg = az;
     cfg.tx_lat_deg = tx_lat;
     cfg.print_every = 1;
+    cfg.params = test_params();
     let r = cfg.trace().unwrap();
     assert!(r.returned_to_ground, "Setup ray must return to ground");
     let last = r.points.last().unwrap();
@@ -28,6 +35,7 @@ fn test_target_basic_convergence() {
         freq_mhz: SearchSpec::Fixed(10.0),
         azimuth_deg: SearchSpec::Fixed(0.0),
         error_limit_km: 10.0,
+        params: test_params(),
         ..TargetConfig::default()
     };
 
@@ -59,6 +67,7 @@ fn test_target_error_within_limit() {
         freq_mhz: SearchSpec::Fixed(10.0),
         azimuth_deg: SearchSpec::Fixed(0.0),
         error_limit_km: 15.0,
+        params: test_params(),
         ..TargetConfig::default()
     };
 
@@ -84,6 +93,7 @@ fn test_target_tight_tolerance() {
         azimuth_deg: SearchSpec::Fixed(0.0),
         error_limit_km: 2.0,
         coarse_step: 1.0,
+        params: test_params(),
         ..TargetConfig::default()
     };
 
@@ -110,6 +120,7 @@ fn test_target_no_solution_unreachable() {
         freq_mhz: SearchSpec::Fixed(10.0),
         azimuth_deg: SearchSpec::Fixed(0.0),
         error_limit_km: 5.0,
+        params: test_params(),
         ..TargetConfig::default()
     };
 
@@ -135,6 +146,7 @@ fn test_target_frequency_range() {
         },
         azimuth_deg: SearchSpec::Fixed(0.0),
         error_limit_km: 15.0,
+        params: test_params(),
         ..TargetConfig::default()
     };
 
@@ -157,6 +169,7 @@ fn test_target_with_ray_path() {
         azimuth_deg: SearchSpec::Fixed(0.0),
         error_limit_km: 15.0,
         include_ray_path: true,
+        params: test_params(),
         ..TargetConfig::default()
     };
 
@@ -182,7 +195,7 @@ fn test_target_different_ed_models() {
         ElectronDensityModel::Chapman,
         ElectronDensityModel::DualChapman,
     ] {
-        let mut params = ModelParams::default();
+        let mut params = test_params();
         params.ed_model = model;
 
         let config = TargetConfig {
@@ -213,12 +226,12 @@ fn test_target_escape_boundary_long_range() {
     // Previously the solver would find zero brackets because rays transition
     // from "returned but too short" directly to "escaped" without a sign change.
     let config = TargetConfig {
-        target_lat_deg: 40.0,   // roughly Spain latitude
-        target_lon_deg: 50.0,   // ~50° east of TX → very long range
-        tx_lat_deg: 34.0,       // SC latitude
+        target_lat_deg: 40.0, // roughly Spain latitude
+        target_lon_deg: 50.0, // ~50° east of TX → very long range
+        tx_lat_deg: 34.0,     // SC latitude
         freq_mhz: SearchSpec::Fixed(10.0),
         azimuth_deg: SearchSpec::Fixed(0.0),
-        error_limit_km: 100.0,  // generous tolerance for this geometry
+        error_limit_km: 100.0, // generous tolerance for this geometry
         coarse_step: 2.0,
         elev_min: 1.0,
         elev_max: 60.0,
@@ -226,6 +239,7 @@ fn test_target_escape_boundary_long_range() {
         max_hops: 1,
         step_size: 5.0,
         max_steps: 1000,
+        params: test_params(),
         ..TargetConfig::default()
     };
 
@@ -236,7 +250,11 @@ fn test_target_escape_boundary_long_range() {
         "Escape-boundary test: {} solutions, {} rays traced, best_err={:.1} km",
         result.solutions.len(),
         result.rays_traced,
-        result.best.as_ref().map(|s| s.error_km).unwrap_or(f64::INFINITY),
+        result
+            .best
+            .as_ref()
+            .map(|s| s.error_km)
+            .unwrap_or(f64::INFINITY),
     );
     // We mainly verify this doesn't panic and does trace rays through escape brackets.
     // Whether a solution is found depends on ionospheric physics — the important thing
@@ -277,6 +295,7 @@ fn test_target_multi_hop_long_distance() {
         max_hops: 3,
         step_size: 5.0,
         max_steps: 1000,
+        params: test_params(),
         ..TargetConfig::default()
     };
 
@@ -286,7 +305,11 @@ fn test_target_multi_hop_long_distance() {
         target_lat,
         result.solutions.len(),
         result.rays_traced,
-        result.best.as_ref().map(|s| s.error_km).unwrap_or(f64::INFINITY),
+        result
+            .best
+            .as_ref()
+            .map(|s| s.error_km)
+            .unwrap_or(f64::INFINITY),
     );
 
     if let Some(best) = &result.best {
@@ -325,6 +348,7 @@ fn test_multi_hop_longitude_accumulates() {
         error_limit_km: 50.0,
         max_hops: 2,
         include_ray_path: true,
+        params: test_params(),
         ..TargetConfig::default()
     };
 
@@ -352,11 +376,15 @@ fn test_solver_status_ok_for_reachable_target() {
         freq_mhz: SearchSpec::Fixed(10.0),
         azimuth_deg: SearchSpec::Fixed(0.0),
         error_limit_km: 15.0,
+        params: test_params(),
         ..TargetConfig::default()
     };
 
     let result = solve_target(&config).unwrap();
-    assert_eq!(result.status, "ok", "Reachable target should have status 'ok'");
+    assert_eq!(
+        result.status, "ok",
+        "Reachable target should have status 'ok'"
+    );
 }
 
 #[test]
@@ -368,11 +396,15 @@ fn test_solver_status_for_unreachable_target() {
         freq_mhz: SearchSpec::Fixed(10.0),
         azimuth_deg: SearchSpec::Fixed(0.0),
         error_limit_km: 5.0,
+        params: test_params(),
         ..TargetConfig::default()
     };
 
     let result = solve_target(&config).unwrap();
-    assert_ne!(result.status, "ok", "Unreachable target should not have status 'ok'");
+    assert_ne!(
+        result.status, "ok",
+        "Unreachable target should not have status 'ok'"
+    );
 }
 
 // ---- Input validation test ----
@@ -382,6 +414,7 @@ fn test_solve_target_rejects_invalid_config() {
     let config = TargetConfig {
         elev_min: 60.0,
         elev_max: 10.0, // min > max!
+        params: test_params(),
         ..TargetConfig::default()
     };
 

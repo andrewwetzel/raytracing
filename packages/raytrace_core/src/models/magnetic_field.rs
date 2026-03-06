@@ -380,7 +380,10 @@ mod tests {
     const EPS: f64 = 1e-10;
 
     fn default_params() -> ModelParams {
-        ModelParams::default()
+        let mut p = ModelParams::default();
+        p.mag_model = MagneticFieldModel::Dipole; // Dipole tests need explicit Dipole
+        p.earth_model = EarthModel::Sphere;
+        p
     }
 
     // ---- DIPOLY (default) ----

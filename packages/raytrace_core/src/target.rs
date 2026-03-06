@@ -269,6 +269,7 @@ fn fire_ray(
             az,
             cur_lat,
             2, // RK4+AM
+            crate::params::CoordinateSystem::Spherical,
             config.step_size,
             config.max_steps,
             1e-4,
@@ -358,13 +359,22 @@ fn signed_range_error_best_hop(
 fn best_hop_gc_error(outcome: &RayOutcome, config: &TargetConfig) -> f64 {
     let mut best = f64::INFINITY;
     for hop in &outcome.hop_landings {
-        let d = haversine_km(hop.lat, hop.lon, config.target_lat_deg, config.target_lon_deg);
-        if d < best { best = d; }
+        let d = haversine_km(
+            hop.lat,
+            hop.lon,
+            config.target_lat_deg,
+            config.target_lon_deg,
+        );
+        if d < best {
+            best = d;
+        }
     }
     if best == f64::INFINITY {
         haversine_km(
-            outcome.landing_lat, outcome.landing_lon,
-            config.target_lat_deg, config.target_lon_deg,
+            outcome.landing_lat,
+            outcome.landing_lon,
+            config.target_lat_deg,
+            config.target_lon_deg,
         )
     } else {
         best
@@ -403,7 +413,15 @@ fn coarse_sweep(
     let outcomes: Vec<(f64, Option<f64>)> = elevations
         .iter()
         .map(|&elev| {
-            let outcome = fire_ray(freq, config.ray_mode, elev, az, config.tx_lat_deg, config, false);
+            let outcome = fire_ray(
+                freq,
+                config.ray_mode,
+                elev,
+                az,
+                config.tx_lat_deg,
+                config,
+                false,
+            );
             let signed_err = outcome.and_then(|o| {
                 if o.returned {
                     Some(signed_range_error_best_hop(
@@ -466,8 +484,7 @@ fn coarse_sweep(
     let sub_step = (config.coarse_step / 8.0).max(0.25);
     let mut refined = Vec::new();
     for bracket in &brackets {
-        let is_escape_bracket =
-            bracket.err_lo.abs() > 1e5 || bracket.err_hi.abs() > 1e5;
+        let is_escape_bracket = bracket.err_lo.abs() > 1e5 || bracket.err_hi.abs() > 1e5;
         if !is_escape_bracket {
             refined.push(bracket.clone());
             continue;
@@ -477,8 +494,15 @@ fn coarse_sweep(
         let mut sub_outcomes: Vec<(f64, Option<f64>)> = Vec::new();
         let mut se = bracket.elev_lo;
         while se <= bracket.elev_hi + 0.001 {
-            let outcome =
-                fire_ray(freq, config.ray_mode, se, az, config.tx_lat_deg, config, false);
+            let outcome = fire_ray(
+                freq,
+                config.ray_mode,
+                se,
+                az,
+                config.tx_lat_deg,
+                config,
+                false,
+            );
             let signed_err = outcome.and_then(|o| {
                 if o.returned {
                     Some(signed_range_error_best_hop(
@@ -531,7 +555,6 @@ fn coarse_sweep(
     }
 
     refined
-
 }
 
 // ============================================================
@@ -558,7 +581,15 @@ fn bisect_elevation(
         let mid = (lo + hi) / 2.0;
         *rays_traced += 1;
 
-        let outcome = fire_ray(freq, config.ray_mode, mid, az, config.tx_lat_deg, config, false);
+        let outcome = fire_ray(
+            freq,
+            config.ray_mode,
+            mid,
+            az,
+            config.tx_lat_deg,
+            config,
+            false,
+        );
         match outcome {
             Some(o) if o.returned => {
                 let err = signed_range_error_best_hop(
@@ -623,14 +654,22 @@ fn nelder_mead_2d(
 ) -> Option<(f64, f64, RayOutcome)> {
     let alpha = 1.0; // reflection
     let gamma = 2.0; // expansion
-    let rho = 0.5;   // contraction
-    let sigma = 0.5;  // shrink
+    let rho = 0.5; // contraction
+    let sigma = 0.5; // shrink
 
     // Objective: great-circle distance from best hop landing to target
     let mut objective = |elev: f64, az: f64| -> (f64, Option<RayOutcome>) {
         *rays_traced += 1;
         let elev_clamped = elev.clamp(config.elev_min, config.elev_max);
-        match fire_ray(freq, config.ray_mode, elev_clamped, az, config.tx_lat_deg, config, false) {
+        match fire_ray(
+            freq,
+            config.ray_mode,
+            elev_clamped,
+            az,
+            config.tx_lat_deg,
+            config,
+            false,
+        ) {
             Some(o) if o.returned => {
                 let best_dist = best_hop_gc_error(&o, config);
                 (best_dist, Some(o))
@@ -641,7 +680,7 @@ fn nelder_mead_2d(
 
     // Initial simplex: triangle around starting point
     let elev_delta = 0.5; // degrees
-    let az_delta = 1.0;   // degrees
+    let az_delta = 1.0; // degrees
 
     let mut simplex: [(f64, f64, f64, Option<RayOutcome>); 3] = {
         let (f0, o0) = objective(initial_elev, initial_az);
@@ -783,7 +822,12 @@ pub fn solve_target(config: &TargetConfig) -> Result<TargetResult, TraceError> {
 
     // If the user gives fixed azimuth, we can also auto-compute a good bearing
     // from TX to target as a starting point for the search.
-    let auto_az = initial_bearing(config.tx_lat_deg, 0.0, config.target_lat_deg, config.target_lon_deg);
+    let auto_az = initial_bearing(
+        config.tx_lat_deg,
+        0.0,
+        config.target_lat_deg,
+        config.target_lon_deg,
+    );
 
     // Build all (freq, az) combos
     let combos: Vec<(f64, f64)> = frequencies
@@ -817,41 +861,44 @@ pub fn solve_target(config: &TargetConfig) -> Result<TargetResult, TraceError> {
 
             // Phase 2: Bisection for each bracket
             for bracket in &brackets {
-                if let Some((elev, outcome)) = bisect_elevation(freq, az, bracket, config, &mut rays) {
+                if let Some((elev, outcome)) =
+                    bisect_elevation(freq, az, bracket, config, &mut rays)
+                {
                     let error = best_hop_gc_error(&outcome, config);
 
                     // Phase 3: Nelder-Mead polish if not yet within tolerance
-                    let (final_elev, final_az, final_outcome, final_error) = if error > config.error_limit_km {
-                        if let Some((nm_elev, nm_az, nm_outcome)) =
-                            nelder_mead_2d(freq, elev, az, config, &mut rays)
-                        {
-                            let nm_err = best_hop_gc_error(&nm_outcome, config);
-                            if nm_err < error {
-                                (nm_elev, nm_az, nm_outcome, nm_err)
+                    let (final_elev, final_az, final_outcome, final_error) =
+                        if error > config.error_limit_km {
+                            if let Some((nm_elev, nm_az, nm_outcome)) =
+                                nelder_mead_2d(freq, elev, az, config, &mut rays)
+                            {
+                                let nm_err = best_hop_gc_error(&nm_outcome, config);
+                                if nm_err < error {
+                                    (nm_elev, nm_az, nm_outcome, nm_err)
+                                } else {
+                                    (elev, az, outcome, error)
+                                }
+                            } else {
+                                (elev, az, outcome, error)
+                            }
+                        } else if error > config.error_limit_km * 0.5 {
+                            // Within tolerance but could be improved — try a quick polish
+                            if let Some((nm_elev, nm_az, nm_outcome)) =
+                                nelder_mead_2d(freq, elev, az, config, &mut rays)
+                            {
+                                let nm_err = best_hop_gc_error(&nm_outcome, config);
+                                if nm_err < error {
+                                    (nm_elev, nm_az, nm_outcome, nm_err)
+                                } else {
+                                    (elev, az, outcome, error)
+                                }
                             } else {
                                 (elev, az, outcome, error)
                             }
                         } else {
+                            // Well within tolerance (< 50% of limit), skip polish
                             (elev, az, outcome, error)
-                        }
-                    } else if error > config.error_limit_km * 0.5 {
-                        // Within tolerance but could be improved — try a quick polish
-                        if let Some((nm_elev, nm_az, nm_outcome)) =
-                            nelder_mead_2d(freq, elev, az, config, &mut rays)
-                        {
-                            let nm_err = best_hop_gc_error(&nm_outcome, config);
-                            if nm_err < error {
-                                (nm_elev, nm_az, nm_outcome, nm_err)
-                            } else {
-                                (elev, az, outcome, error)
-                            }
-                        } else {
-                            (elev, az, outcome, error)
-                        }
-                    } else {
-                        // Well within tolerance (< 50% of limit), skip polish
-                        (elev, az, outcome, error)
-                    };
+                        };
 
                     if final_error <= config.error_limit_km {
                         // Re-trace with full path if requested
@@ -901,7 +948,11 @@ pub fn solve_target(config: &TargetConfig) -> Result<TargetResult, TraceError> {
     }
 
     // Sort by error ascending
-    all_solutions.sort_by(|a, b| a.error_km.partial_cmp(&b.error_km).unwrap_or(std::cmp::Ordering::Equal));
+    all_solutions.sort_by(|a, b| {
+        a.error_km
+            .partial_cmp(&b.error_km)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     // Deduplicate: remove solutions with very similar elevation/azimuth
     all_solutions.dedup_by(|a, b| {
