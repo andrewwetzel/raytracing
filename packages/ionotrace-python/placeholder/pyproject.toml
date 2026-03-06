@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ionotrace"
-version = "0.5.3"
+version = "0.5.4"
 description = "High-performance ionospheric ray tracing engine — Python bindings for the Rust ionotrace crate"
 requires-python = ">=3.9"
 license = {text = "MIT"}

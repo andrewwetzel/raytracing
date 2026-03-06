@@ -1,97 +1,104 @@
 name: Release
 
 on:
-    push:
-        branches: [main]
+  push:
+    branches: [main]
 
 jobs:
-    check-version:
-        runs-on: ubuntu-latest
-        outputs:
-            version: ${{ steps.current.outputs.version }}
-            changed: ${{ steps.compare.outputs.changed }}
-        steps:
-            - uses: actions/checkout@v4
-              with:
-                  fetch-depth: 2
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.current.outputs.version }}
+      changed: ${{ steps.compare.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
-            - name: Read current version
-              id: current
-              run: echo "version=$(cat VERSION | tr -d '[:space:]')" >> "$GITHUB_OUTPUT"
+      - name: Read current version
+        id: current
+        run: echo "version=$(cat VERSION | tr -d '[:space:]')" >> "$GITHUB_OUTPUT"
 
-            - name: Check version changed
-              id: compare
-              run: |
-                  CURRENT=$(cat VERSION | tr -d '[:space:]')
-                  PREVIOUS=$(git show HEAD~1:VERSION 2>/dev/null | tr -d '[:space:]' || echo "")
-                  if [ "$CURRENT" = "$PREVIOUS" ]; then
-                    echo "changed=false" >> "$GITHUB_OUTPUT"
-                    echo "::error::VERSION file was not bumped ($CURRENT). Every push to main must include a version bump."
-                    exit 1
-                  fi
-                  echo "changed=true" >> "$GITHUB_OUTPUT"
-                  echo "Version bumped: $PREVIOUS → $CURRENT"
+      - name: Check version changed
+        id: compare
+        run: |
+          CURRENT=$(cat VERSION | tr -d '[:space:]')
+          PREVIOUS=$(git show HEAD~1:VERSION 2>/dev/null | tr -d '[:space:]' || echo "")
+          if [ "$CURRENT" = "$PREVIOUS" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "::error::VERSION file was not bumped ($CURRENT). Every push to main must include a version bump."
+            exit 1
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "Version bumped: $PREVIOUS → $CURRENT"
 
-    publish-pypi:
-        needs: check-version
-        runs-on: ubuntu-latest
-        environment: pypi
-        permissions:
-            id-token: write
-        steps:
-            - uses: actions/checkout@v4
+  publish-pypi:
+    needs: check-version
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
 
-            - uses: actions/setup-python@v5
-              with:
-                  python-version: "3.12"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
-            - name: Build placeholder package
-              run: |
-                  pip install build
-                  python -m build packages/ionotrace-python/placeholder
+      - name: Build placeholder package
+        run: |
+          pip install build
+          python -m build packages/ionotrace-python/placeholder
 
-            - name: Publish to PyPI
-              uses: pypa/gh-action-pypi-publish@release/v1
-              with:
-                  packages-dir: packages/ionotrace-python/placeholder/dist/
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/ionotrace-python/placeholder/dist/
 
-    publish-crate:
-        needs: check-version
-        runs-on: ubuntu-latest
-        environment: crates-io
-        permissions:
-            id-token: write
-            contents: read
-        steps:
-            - uses: actions/checkout@v4
+  publish-crate:
+    needs: check-version
+    runs-on: ubuntu-latest
+    environment: crates-io
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
 
-            - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@stable
 
-            - name: Get OIDC token and publish
-              working-directory: packages/raytrace_core
-              run: |
-                  # Get GitHub OIDC token for crates.io audience
-                  OIDC_TOKEN=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-                    "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=crates.io" | jq -r '.value')
+      - name: Get GitHub OIDC Token
+        uses: actions/github-script@v7
+        id: oidc
+        with:
+          script: |
+            return await core.getIDToken('crates.io')
+          result-encoding: string
 
-                  # Exchange OIDC token for a crates.io API token
-                  CRATES_TOKEN=$(curl -sS -X POST https://crates.io/api/v1/trusted_publishing/tokens \
-                    -H "Content-Type: application/json" \
-                    -d "{\"jwt\": \"$OIDC_TOKEN\"}" | jq -r '.token')
+      - name: Exchange token and publish to crates.io
+        working-directory: packages/raytrace_core
+        env:
+          OIDC_TOKEN: ${{ steps.oidc.outputs.result }}
+        run: |
+          # Exchange OIDC token for a crates.io API token
+          # -f ensures curl fails on HTTP error instead of silent failure
+          CRATES_TOKEN=$(curl -sS -f -X POST https://crates.io/api/v1/trusted_publishing/tokens \
+            -H "Content-Type: application/json" \
+            -d "{\"jwt\": \"$OIDC_TOKEN\"}" | jq -r '.token')
 
-                  # Publish using the temporary token
-                  CARGO_REGISTRY_TOKEN="$CRATES_TOKEN" cargo publish --allow-dirty
+          # Publish using the temporary token
+          CARGO_REGISTRY_TOKEN="$CRATES_TOKEN" cargo publish --allow-dirty
 
-    tag-release:
-        needs: [check-version, publish-pypi, publish-crate]
-        runs-on: ubuntu-latest
-        permissions:
-            contents: write
-        steps:
-            - uses: actions/checkout@v4
+  tag-release:
+    needs: [check-version, publish-pypi, publish-crate]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
 
-            - name: Create git tag
-              run: |
-                  VERSION=${{ needs.check-version.outputs.version }}
-                  git tag "v${VERSION}"
-                  git push origin "v${VERSION}"
+      - name: Create git tag
+        run: |
+          VERSION=${{ needs.check-version.outputs.version }}
+          git tag "v${VERSION}"
+          git push origin "v${VERSION}"
