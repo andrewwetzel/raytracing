@@ -54,3 +54,7 @@ Thumbs.db
 
 
 pharlap_4.7.4/
+scripts/verify_city_bank_pharlap.m
+scripts/verify_city_bank_pharlap.octave
+gh.tar.gz
+gh_*_linux_amd64/

@@ -1336,18 +1336,18 @@ impl TargetConfig {
 
 /// Trace a fan of rays through the ionosphere.
 #[pyfunction]
-fn fan_trace(config: &FanTraceConfig) -> PyResult<FanTraceResult> {
+fn fan_trace(py: Python<'_>, config: &FanTraceConfig) -> PyResult<FanTraceResult> {
     let rust_cfg = config.to_rust_config();
-    let result = ionotrace_core::fan_trace(&rust_cfg)
+    let result = py.allow_threads(|| ionotrace_core::fan_trace(&rust_cfg))
         .map_err(|e: ionotrace_core::TraceError| PyValueError::new_err(format!("{e}")))?;
     Ok(FanTraceResult::from(&result))
 }
 
 /// Solve for ray launch parameters to hit a target location.
 #[pyfunction]
-fn solve_target(config: &TargetConfig) -> PyResult<TargetResult> {
+fn solve_target(py: Python<'_>, config: &TargetConfig) -> PyResult<TargetResult> {
     let rust_cfg = config.to_rust_config();
-    let result = ionotrace_core::solve_target(&rust_cfg)
+    let result = py.allow_threads(|| ionotrace_core::solve_target(&rust_cfg))
         .map_err(|e: ionotrace_core::TraceError| PyValueError::new_err(format!("{e}")))?;
     Ok(TargetResult::from(&result))
 }

@@ -591,7 +591,7 @@ fn swwfwc(
     };
 
     let yt2 = y_mag * y_mag - yl2;
-    let yt4 = yt2 * yt2;
+    let _yt4 = yt2 * yt2;
 
     let col = compute_col(r, theta, phi, freq_mhz, p);
     let z = col.z;
@@ -629,7 +629,7 @@ fn swwfwc(
         let g1_x = g1;
         let dux_dx = Cx::from_real(0.0) - g1_x;
         let dd_dx = dux_dx * 2.0;
-        let dnum_dx = g1_x * ux * (-2.0) + Cx::from_real(x) * g1_x * dd_dx * (-1.0);
+        let _dnum_dx = g1_x * ux * (-2.0) + Cx::from_real(x) * g1_x * dd_dx * (-1.0);
         // Use simplified chain-rule form matching AH structure
         pnpx = -((g1 * ux2) * 2.0 - yt2_g2 * (g1 - Cx::from_real(2.0 * x) * g1)
             + (yt2_g2 * yt2_g2 * (g1 - Cx::from_real(2.0 * x) * g1)

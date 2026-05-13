@@ -307,3 +307,11 @@ test: test-rust test-fortran test-frontend
 # Run tests using the Fortran Package Manager
 fpm-test:
     @cd packages/ft_raytrace && fpm test
+
+# ===================================================================
+# City Bank — Target Solver Validation
+# ===================================================================
+
+# Generate city-to-city test bank with pretty-printed results (parallel, rich tables)
+test-bank:
+    packages/ionotrace-python/.venv/bin/python scripts/city_bank.py

@@ -346,14 +346,14 @@ fn trace_ray_spherical(
         }
 
         let h = altitude(state.y[0], state.y[1]);
+        if h.is_nan() || h.abs() > 50000.0 {
+            break;
+        }
         if h > result.max_height {
             result.max_height = h;
         }
         if h > 10.0 {
             went_up = true;
-        }
-        if h.is_nan() || h.abs() > 50000.0 {
-            break;
         }
 
         let ground = went_up && h < 0.0;
@@ -520,14 +520,14 @@ fn trace_ray_ecef(
         }
 
         let h = altitude(state.y[0], state.y[1], state.y[2]);
+        if h.is_nan() || h.abs() > 50000.0 {
+            break;
+        }
         if h > result.max_height {
             result.max_height = h;
         }
         if h > 10.0 {
             went_up = true;
-        }
-        if h.is_nan() || h.abs() > 50000.0 {
-            break;
         }
 
         let ground = went_up && h < 0.0;
